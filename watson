@@ -1,0 +1,265 @@
+#!/usr/bin/perl
+# watson - collaborative code tool
+# nhmood @ [goosecode labs] | 2012
+
+
+# Todo:
+# [!] - .watsonrc - hold config on what tags to search for
+#  		take user command line arg
+# [!] - put in pretty colors on terminal prompts/prints
+# [!] - add Todo: listings as well as fixreviewme tags
+# [!] - set tags through command line (only supports dirs now)
+# [!] - add priority listing for tags
+# [!] - generate .html file with report
+# [!] - add text editor/jump to code for each item in .html report
+# [!] - feed output to less and change color prints 
+# [!] - command line option to not create .watsonrc
+# [!] - allow for single file usage instead of folder
+# [!] - break everything into functions
+# [!] - better error checking
+
+# [reviewme] - Should I be using strict/warnings?
+#use strict;
+#use warnings;
+#use Term::ANSIColor;
+
+
+# Print watson header
+
+# [reviewme] - clear might not be portable 
+# Clear screen and set to top
+print "\033[2J \033[0;0H";  
+
+print "watson - collaborative code tool\n";
+print "nhmood @ [goosecode] 2012\n\n";
+
+
+# Open/create .watsonrc
+print "[Checking for .watsonrc]\n";
+my $rc = ".watsonrc";
+open(RC, "+>>", $rc);
+if ( -z "$rc"){
+	print ".watsonrc not found! \n";
+	print "Creating default .watsonrc \n";
+
+	# Create default .watsonrc
+	printRC(RC);
+}
+else {
+	print ".watsonrc found\n\n";
+}
+
+
+# Parse command line arguments
+# Check args, only takes dirs for now
+print "[Checking CL args]\n";
+if ($#ARGV > -1){
+	# Try to open each arg (as a directory)
+	# If valid, push into @dirs array, else let user know
+	foreach $arg (@ARGV){
+		if (checkDir($arg) == 1){
+			print "dirs: {$arg} valid directory, added from CL. \n";
+			push(@dirs, $arg);
+		}
+	}
+	print "\n";
+}
+else {
+	print "No command line arguments passed.\n";
+	print "\n";
+
+}
+
+
+# Parse .watsonrc
+print "Parsing .watsonrc\n";
+
+# Go to beginning of file
+seek(RC, 0, 0);						
+my $curarr;	 
+
+# Read .watsonrc line by line
+while (my $line = <RC>){
+
+	# Ignore full line comments
+	if ($line !~ m/^#/){		
+
+		# Regex to find [section], store into $section
+		if ($line =~ /^\[(\w+)\]/){
+			$section = $1;
+			
+			
+			# [reviewme] - Seems like theres a better way to "unset" $section
+			# If @dirs wasn't populated by CL args, populate from .watsonrc
+			if ($section eq 'dirs' && scalar(@dirs) != 0){
+				print "Directories set from command line, ignoring .watsonrc [dirs]!\n";
+				$section = '';
+			}
+		}
+
+		# Else, if not a blank line, valid parameter
+		# Store into array of whichever section last defined
+		elsif ($section ne '' && ($line =~ /\S/)){
+			# Specific regex for dirs, then push to @dirs
+			if ($section eq "dirs"){
+				
+				$line =~ /^((\/?\w+\/?)+)/;
+				print "dirs: {$1} added from rc. \n";
+				push(@dirs, $1);
+			}
+			# Specific regex for tags, then push to @tags
+			elsif ($section eq "tags"){
+				$line =~ /^(\w+( \| [0-9])?)/;
+				print "tags: {$1} added from rc. \n";
+				push(@tags, $1);
+			}
+		} 
+
+	}
+}
+print "\n\n\n";
+# For each directory obtained from .watsonrc or CL, look for files in them
+foreach my $dir (@dirs){
+	if (parseDirs($dir) == -1){
+		print "$dir could not be opened.\n";
+	}
+}
+
+
+
+# Parse source files in specified directories for 
+sub parseDirs {
+	($dir) = @_;
+	print "parseDirs: $dir\n";
+	# Error check for input
+	if (length(dir) == 0){
+		print "No directories specified. \n";
+		return 0;
+	}
+
+	# Check if folder is valid and then read files in directory
+	# If other folders are found, parse those as well
+	# If file, pass through parseFile 
+	
+	# Error check directory
+	$dh = opendir(DIR, $dir);
+	if (!$dh){
+		print "$dir cannot be opened. \n";
+		return -1;
+	}
+
+
+	if (!opendir(myDIR, $dir)){
+		print "$dir cannot be opened. \n";
+		return -1;
+	}
+	print "$dir opened. \n";
+
+	# Loop through all entries in directory
+	print "while loop starting. \n";
+	while (my $entry = readdir(DIR)){
+			print "$entry \n";
+	}
+
+
+
+
+	
+
+}
+
+
+
+
+
+# if (opendir(DIR, $dir)){
+# 	print "$dir opened. \n";
+# 	print "while loop starting. \n";
+# 	while (my $entry = readdir(DIR)){
+# 		# Ignore . and .. dirs
+# 		if ($entry ne "." && $entry ne ".."){
+# 			if (-f "$dir/$entry"){
+# 				print "$entry is a file, parsing! \n";
+# 				parseFile("$dir/$entry");
+# 			}
+# 			elsif (-d "$dir/$entry"){
+# 				print "$entry is a folder, searching! \n";
+# 				parseDirs("$dir/$entry");
+# 			}
+# 		}
+# 		print "$entry done\n";
+# 	}
+
+# }
+# }
+
+
+sub parseFile {
+	($file) = @_;
+	print "parseFile: $file\n";
+	if (length($file) == 0){
+		print "No file specified.\n";
+		return 0;
+	}
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+# Functions
+
+
+# checkDir - checks if directory exists
+sub checkDir {
+	($dir) = @_;
+	# Error check for input
+	if (length($dir) == 0){
+		print "No directories specified.\n";
+		return 0;
+	}
+	# Check if directory can be opened
+	if (!opendir(DIR, $dir)){
+		print "$dir is not a directory, skipping.\n";
+		return -1;
+	}
+	return 1;
+}
+
+
+# printRC - creates default .watsonrc
+sub printRC {
+	($file) = @_;
+
+# [fixme] - Figure out a way to indent this?
+$rcdefault = <<EOF; 
+# .watsonrc
+# watson - collaborative code tool
+# [goosecode] labs / 2012
+\n
+# Directories 
+[dirs] 
+src/
+\n 
+# Tags 
+# tagname | importance 
+# tagname - name of tag to look for (without []) 
+# importance - 1-10 ranking, if blank will use order
+[tags] 
+fixme | 1 
+reviewme | 2
+EOF
+
+	# Print default .watsonrc above to specified file
+	print $file $rcdefault;
+	return 1;
+}

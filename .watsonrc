@@ -1,0 +1,17 @@
+# .watsonrc
+# watson - collaborative code tool
+# [goosecode] labs / 2012
+
+
+# Directories 
+[dirs] 
+src/
+
+ 
+# Tags 
+# tagname | importance 
+# tagname - name of tag to look for (without []) 
+# importance - 1-10 ranking, if blank will use order
+[tags] 
+fixme | 1 
+reviewme | 2
