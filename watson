@@ -20,13 +20,17 @@
 # [!] - if x is placed in todo [!] then move it to separate file
 # [!] - have option to export tags/todo to github/bitbucket issue tracker
 # [!] - add function and ask user to send phonehome to keep track of stats
+# [!] - add ability to generate error report(s)?
+# 		turn on/off strict/warning and pipe (for perl for example)
+
+
 
 # [reviewme] - Should I be using strict/warnings?
 #use strict;
-#use warnings;
+use warnings;
 #use Term::ANSIColor;
-
-
+my @dirs;
+my @tags;
 # Print watson header
 
 # [reviewme] - clear might not be portable 
@@ -61,7 +65,7 @@ print "[Checking CL args]\n";
 if ($#ARGV > -1){
 	# Try to open each arg (as a directory)
 	# If valid, push into @dirs array, else let user know
-	foreach $arg (@ARGV){
+	foreach my $arg (@ARGV){
 		if (checkDir($arg)){
 			$arg =~ s/(\/)+$//;
 			print "dirs: {$arg} valid directory, added from CL. \n";
@@ -88,9 +92,9 @@ while (my $line = <RC>){
 
 	# Ignore full line comments
 	if ($line !~ m/^#/){		
-
 		# Regex to find [section], store into $section
 		if ($line =~ /^\[(\w+)\]/){
+			# [fixme] - strict says I need to scope $section, but can't get it to work
 			$section = $1;
 			
 			
@@ -144,7 +148,7 @@ foreach my $dir (@dirs){
 
 # Parse source files in specified directories for 
 sub parseDirs {
-	($dir) = @_;
+	my ($dir) = @_;
 	print "parseDirs: $dir\n";
 	
 	# [fixme] - Replace with global directory checker (exist + open)
@@ -160,8 +164,8 @@ sub parseDirs {
 	# If file, pass through parseFile 
 	
 	# Error check directory
-	$dh = opendir(DIR, $dir);
-	if (!$dh){
+	opendir(my $pdir, $dir);
+	if (!$pdir){
 		print "$dir cannot be opened. \n";
 		return -1;
 	}
@@ -169,7 +173,7 @@ sub parseDirs {
 
 	# Loop through all entries in directory
 	print "while loop starting. \n";
-	while (my $entry = readdir(DIR)){
+	while (my $entry = readdir($pdir)){
 		print "entry: $entry \n";
 		# Ignore . and .. 
 		if ($entry ne "." && $entry ne ".."){
@@ -179,15 +183,17 @@ sub parseDirs {
 			}
 			elsif (-d "$dir/$entry"){
 				print "$dir/$entry is a dir! searching\n";
+				my $a = parseDirs("$dir/$entry");
+				print "YYYY $a\n";
 			}
 		}
 		print "$dir/$entry done\n";
 	}
 
 
+	closedir($pdir);
 
-
-	
+	return 1;
 
 }
 
@@ -218,7 +224,7 @@ sub parseDirs {
 
 
 sub parseFile {
-	($file) = @_;
+	my ($file) = @_;
 	print "parseFile: $file\n";
 	if (length($file) == 0){
 		print "No file specified.\n";
@@ -244,7 +250,7 @@ sub parseFile {
 
 # checkDir - checks if directory exists
 sub checkDir {
-	($dir) = @_;
+	my ($dir) = @_;
 	# Error check for input
 	if (length($dir) == 0){
 		print "No directories specified.\n";
@@ -261,10 +267,10 @@ sub checkDir {
 
 # printRC - creates default .watsonrc
 sub createRC {
-	($file) = @_;
+	my ($file) = @_;
 
 # [fixme] - Figure out a way to indent this?
-$rcdefault = <<EOF; 
+my $rcdefault = <<EOF; 
 # .watsonrc
 # watson - collaborative code tool
 # [goosecode] labs / 2012
