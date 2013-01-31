@@ -9,7 +9,7 @@
 # [!] - put in pretty colors on terminal prompts/prints
 # [!] - add Todo: listings as well as fixreviewme tags
 # [!] - set tags through command line (only supports dirs now)
-# [!] - add priority listing for tags
+# [!] - add priority listing for tags and todo
 # [!] - generate .html file with report
 # [!] - add text editor/jump to code for each item in .html report
 # [!] - feed output to less and change color prints 
@@ -22,7 +22,15 @@
 # [!] - add function and ask user to send phonehome to keep track of stats
 # [!] - add ability to generate error report(s)?
 # 		turn on/off strict/warning and pipe (for perl for example)
-# [!] - changelist, working/notworkign
+# [!] - reformat how tag comments are defined
+#		line on tag is short comment
+#		all lines that are commented AFTER tag BEFORE newline are long comment
+# [!] - changelist such that if a tag is replaced with its matching fixed
+#		remove issue (resolve) on github/bitbucket, put it into list of fixed
+#		issues, and modify source to remove tag (optional) 
+# [!] - store in separate file or parse every time? (thinking parse)
+
+
 
 
 # [reviewme] - Should I be using strict/warnings?
@@ -144,9 +152,20 @@ while (my $line = <RC>){
 print "\n\n\n";
 
 
-parseFile();
-parseFile("lolol");
-parseFile("src/a.cpp");
+
+
+# For each directory obtained from .watsonrc or CL, look for files in them
+foreach my $dir (@dirs){
+	push(@structure, parseDirs($dir));
+	print Dumper(@structure);
+
+
+        #print Dumper(parseDirs($dir)->{files}[0]);
+
+        #if (parseDirs($dir) == 0){
+        #        print "$dir could not be opened.\n";
+        #}
+}
 
 
 
@@ -193,10 +212,12 @@ sub parseFile {
 	}
 
 	#[fixme] - change name to issueList
-	my $issues = {}; 
+	my $issues = {};
+	$issues->{filename} = "$file"; 
 	foreach $tag (@tags){
 		$issues->{$tag} = \@{$tag};
-		print Dumper($issues->{$tag}[0]);
+		#print Dumper($issues->{$tag}[0]);
+		#print $issues->{filename}, "\n";
 	}
 
 	return $issues;
@@ -204,91 +225,65 @@ sub parseFile {
 }
 
 
+# Parse source files in specified directories for 
+sub parseDirs {
+	my ($dir) = @_;
+	print "parseDirs: $dir\n";
+
+	my @pdirs;
+	my @pfiles;
 
 
+	# [fixme] - Replace with global directory checker (exist + open)
+	# Error check for input
+	if (length($dir) == 0){
+		print "No directories specified. \n";
+		return 0;
+	}
 
-
-
-
-
-# # Parse source files in specified directories for 
-# sub parseDirs {
-# 	my ($dir) = @_;
-# 	print "parseDirs: $dir\n";
+	# [fixme] - add option to stop from going deeper dirs (depth?)
+	# Check if folder is valid and then read files in directory
+	# If other folders are found, parse those as well
+	# If file, pass through parseFile 
 	
-# 	# [fixme] - Replace with global directory checker (exist + open)
-# 	# Error check for input
-# 	if (length($dir) == 0){
-# 		print "No directories specified. \n";
-# 		return 0;
-# 	}
-
-# 	# [fixme] - add option to stop from going deeper dirs
-# 	# Check if folder is valid and then read files in directory
-# 	# If other folders are found, parse those as well
-# 	# If file, pass through parseFile 
-	
-# 	# Error check directory
-# 	opendir(my $pd, $dir);
-# 	if (!$pd){
-# 		print "$dir cannot be opened. \n";
-# 		return -1;
-# 	}
-# 	print "$dir opened. \n";
-
-	
+	# Error check directory
+	opendir(my $pd, $dir);
+	if (!$pd){
+		print "$dir cannot be opened. \n";
+		return -1;
+	}
+	print "$dir opened. \n";
 
 
-# 	# [fixme] - get list in alphabetical order (looks better on output)
-# 	# Loop through all entries in directory
-# 	print "while loop starting. \n";
-# 	while (my $entry = readdir($pd)){
-# 		# Ignore . and .. 
-# 		if ($entry ne "." && $entry ne ".."){
-# 			# Check if entry is a file, if so parse
-# 			if (-f "$dir/$entry"){
-# 				print "$dir/$entry is a file! parsing\n";
-# 				parseFile("$dir/$entry");
-# 			}
-# 			elsif (-d "$dir/$entry"){
-# 				print "$dir/$entry is a dir! searching\n";
-# 				parseDirs("$dir/$entry");
-# 			}
-# 			print "done parsing $entry\n";
+	# [fixme] - get list in alphabetical order (looks better on output)
+	# Loop through all entries in directory
+	print "while loop starting. \n";
+	my @dirlist = sort(readdir($pd));
 
-# 		}
-# 	}
+	foreach $entry (@dirlist){
+		# Ignore . and ..
+		if ($entry ne "." && $entry ne ".."){
+			# Check if entry is a file, if so parse
+			if (-f "$dir/$entry"){
+				print "$dir/$entry is a file!\n";
+				push(@pfiles, parseFile("$dir/$entry"));
+			}
+			elsif (-d "$dir/$entry"){
+				print "$dir/$entry is a dir!\n";
+				push(@pdirs, parseDirs("$dir/$entry"));
+			}
+		}
+	}
 
+	closedir($pd);
 
-# 	closedir($pd);
+	$structure = {};
+	$structure->{files} = \@pfiles;
+	$structure->{dirs} = \@pdirs;
 
-# 	return @structure;
+	return $structure;
 
-# }
-
-
-
-
-
-
-
-
-
-# # For each directory obtained from .watsonrc or CL, look for files in them
-# foreach my $dir (@dirs){
-# 	my @something = parseDirs($dir);
-# 	print "@something\n";
-# 	#if (parseDirs($dir) == -1){
-# 	#	print "$dir could not be opened.\n";
-# 	#}
-# }
-
-
-
-
-
-
-
+}
 
 
 
@@ -338,3 +333,4 @@ EOF
 	print $file $rcdefault;
 	return 1;
 }
+
