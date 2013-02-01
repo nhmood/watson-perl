@@ -157,7 +157,7 @@ print "\n\n\n";
 # For each directory obtained from .watsonrc or CL, look for files in them
 foreach my $dir (@dirs){
 	push(@structure, parseDirs($dir));
-	print Dumper(@structure);
+	#print Dumper(@structure);
 
 
         #print Dumper(parseDirs($dir)->{files}[0]);
@@ -167,7 +167,30 @@ foreach my $dir (@dirs){
         #}
 }
 
+print Dumper(@structure);
 
+# Display block
+foreach $entry (@structure){
+	printResults($entry);
+}
+
+sub printResults {
+	my ($entry) = @_;
+	for ($i = 0; $i < scalar( @{$entry->{files}}); $i++){
+		print $entry->{files}[$i]->{filename}, "\n";
+		foreach $tag (@tags){
+			printf "\t\[$tag\]\n";
+			for ($j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
+				print "\t$entry->{files}[$i]->{$tag}[$j]->{linenumber} - ";
+				print "$entry->{files}[$i]->{$tag}[$j]->{comment} \n";
+			}
+		}
+	}
+
+	for ($i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
+		printResults($entry->{dirs}[$i]);
+	}
+}
 
 sub parseFile {
 	# [fixme] - need a better check for valid files (when using @_)
@@ -262,7 +285,7 @@ sub parseDirs {
 
 	foreach $entry (@dirlist){
 		# Ignore . and ..
-		if ($entry ne "." && $entry ne ".."){
+		if ($entry ne "." && $entry ne ".." && $entry ne ".git" && $entry ne ".gitignore"){
 			# Check if entry is a file, if so parse
 			if (-f "$dir/$entry"){
 				print "$dir/$entry is a file!\n";
