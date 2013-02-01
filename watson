@@ -1,7 +1,8 @@
 #!/usr/bin/perl
 # watson - collaborative code tool
 # nhmood @ [goosecode labs] | 2012
-
+# Copyright (c) 2012-2013 goosecode labs
+# See the file LICENSE for copying permission
 
 # Todo:
 # [!] - .watsonrc - hold config on what tags to search for
