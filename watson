@@ -36,9 +36,10 @@
 
 # [reviewme] - Should I be using strict/warnings?
 #use strict;
-use warnings;
+#use warnings;
+
 # For color print outs
-#use Term::ANSIColor;
+use Term::ANSIColor;
 
 # For visualizing structures
 use Data::Dumper;
@@ -46,9 +47,9 @@ use Data::Dumper;
 
 
 # Global variables
-my @dirs;
-my @tags;
-my @structure;
+my @dirs;	# Hold dirs found from CL or .watsonrc
+my @tags;	# Hold tags found from .watsonrc
+my @structure;	# Hold final output 
 	
 
 
@@ -57,14 +58,33 @@ my @structure;
 # Clear screen and set to top
 print "\033[2J \033[0;0H";  
 
+printHeader();
+
+# Header print
+sub printHeader {
+	print colored ["bright_yellow"], "watson";
+	print colored ["magenta"],  " // ";
+	print colored ["bright_white"], "collaborative source tool\n";
+
+	#print colored ["bright_black on_white"], "watson | collaborative code tool\n";
+
+	print colored ["bright_white"], "[";
+	print colored ["bright_yellow"], "goosecode";
+	print colored ["bright_white"], "]";
+	print colored [""], " // ";
+	print colored ["magenta"], "2012-2013\n";
+
+
+	#"yellow"], "[goosecode] labs | 2012-2013\n\n";
+}
 
 # Header info
-print "watson - collaborative code tool \n";
-print "nhmood @ [goosecode] 2012 \n\n";
+#print colored ["magenta"], "watson | collaborative code tool\n";
+#print colored ["yellow"], "[goosecode] labs | 2012-2013 \n\n";
 
 
 # Open/create .watsonrc
-print "[Checking for .watsonrc] \n";
+print colored ["bright_black"], "[Checking for .watsonrc] \n";
 # [reviewme] - Allow user to set name of file?
 open(RC, "+>>", ".watsonrc");
 # -z checks if filesize is 0
@@ -76,7 +96,7 @@ if ( -z ".watsonrc"){
 	createRC(RC);
 }
 else {
-	print ".watsonrc found \n\n";
+	print colored ["green"], ".watsonrc found \n\n";
 }
 
 
@@ -168,7 +188,7 @@ foreach my $dir (@dirs){
         #}
 }
 
-print Dumper(@structure);
+#print Dumper(@structure);
 
 # Display block
 foreach $entry (@structure){
@@ -239,9 +259,10 @@ sub parseFile {
 	my $issues = {};
 	$issues->{filename} = "$file"; 
 	foreach $tag (@tags){
-		$issues->{$tag} = \@{$tag};
+		$issues->{$tag} = [@{$tag}];
 		#print Dumper($issues->{$tag}[0]);
 		#print $issues->{filename}, "\n";
+		undef @{$tag};
 	}
 
 	return $issues;
