@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # watson - collaborative code tool
-# nhmood @ [goosecode labs] | 2012
+# Original Author: nhmood @ [goosecode labs] | 2012
+# Contributor: eugenek @ [goosecode labs] | 2012
 # Copyright (c) 2012-2013 goosecode labs
 # See the file LICENSE for copying permission
 
@@ -36,21 +37,20 @@
 
 # [reviewme] - Should I be using strict/warnings?
 #use strict;
-#use warnings;
+use warnings;
 
 # For color print outs
-use Term::ANSIColor;
+#use Term::ANSIColor;
 
 # For visualizing structures
 use Data::Dumper;
 
 
-
 # Global variables
-my @dirs;	# Hold dirs found from CL or .watsonrc
-my @tags;	# Hold tags found from .watsonrc
-my @structure;	# Hold final output 
-	
+my @DIRS;
+my @TAGS;
+my @STRUCTURE;
+my $IGNORE_RC_DIRS = 0;
 
 
 # Print watson header
@@ -58,45 +58,25 @@ my @structure;	# Hold final output
 # Clear screen and set to top
 print "\033[2J \033[0;0H";  
 
-printHeader();
-
-# Header print
-sub printHeader {
-	print colored ["bright_yellow"], "watson";
-	print colored ["magenta"],  " // ";
-	print colored ["bright_white"], "collaborative source tool\n";
-
-	#print colored ["bright_black on_white"], "watson | collaborative code tool\n";
-
-	print colored ["bright_white"], "[";
-	print colored ["bright_yellow"], "goosecode";
-	print colored ["bright_white"], "]";
-	print colored [""], " // ";
-	print colored ["magenta"], "2012-2013\n";
-
-
-	#"yellow"], "[goosecode] labs | 2012-2013\n\n";
-}
 
 # Header info
-#print colored ["magenta"], "watson | collaborative code tool\n";
-#print colored ["yellow"], "[goosecode] labs | 2012-2013 \n\n";
+print "watson - collaborative code tool \n";
+print "nhmood @ [goosecode] 2012 \n\n";
 
 
 # Open/create .watsonrc
-print colored ["bright_black"], "[Checking for .watsonrc] \n";
-# [reviewme] - Allow user to set name of file?
-open(RC, "+>>", ".watsonrc");
+print "[Checking for .watsonrc] \n";
+
 # -z checks if filesize is 0
 if ( -z ".watsonrc"){
 	print ".watsonrc not found! \n";
 	print "Creating default .watsonrc \n";
 
 	# Create default .watsonrc
-	createRC(RC);
+	createRC(".watsonrc");
 }
 else {
-	print colored ["green"], ".watsonrc found \n\n";
+	print ".watsonrc found \n\n";
 }
 
 
@@ -110,7 +90,9 @@ if ($#ARGV > -1){
 		if (checkDir($arg)){
 			$arg =~ s/(\/)+$//;
 			print "dirs: {$arg} valid directory, added from CL. \n";
-			push(@dirs, $arg);
+			push(@DIRS, $arg);
+			$IGNORE_RC_DIRS = 1;
+			print "Ignoring RC directories\n";
 		}
 	}
 	print "\n";
@@ -124,60 +106,51 @@ else {
 
 # Parse .watsonrc
 print "Parsing .watsonrc\n";
-
-# Go to beginning of file
-seek(RC, 0, 0);						 
-
-# Read .watsonrc line by line
-while (my $line = <RC>){
-
-	# Ignore full line comments
-	if ($line !~ m/^#/){		
-		# Regex to find [section], store into $section
-		if ($line =~ /^\[(\w+)\]/){
-			# [fixme] - strict says I need to scope $section, but can't get it to work
-			$section = $1;
-			
-			
-			# [reviewme] - Seems like theres a better way to "unset" $section
-			# If @dirs wasn't populated by CL args, populate from .watsonrc
-			if ($section eq 'dirs' && scalar(@dirs) != 0){
-				print "Directories set from command line, ignoring .watsonrc [dirs]!\n";
-				$section = '';
-			}
-		}
-
-		# Else, if not a blank line, valid parameter
-		# Store into array of whichever section last defined
-		elsif ($section ne '' && ($line =~ /\S/)){
-			# Specific regex for dirs, then push to @dirs
-			if ($section eq "dirs"){
-				
-				$line =~ /^((\/?\w+\/?)+)/;
-				$line = $1;
-				$line =~ s/(\/)+$//;
-				print "dirs: $line added from rc. \n";
-
-				push(@dirs, $line);
-			}
-			# Specific regex for tags, then push to @tags
-			elsif ($section eq "tags"){
-				$line =~ /^(\w+( \| [0-9])?)/;
-				print "tags: {$1} added from rc. \n";
-				push(@tags, $1);
-			}
-		} 
-
+open(my $watsonrc, "<", ".watsonrc");
+# Read .watsonrc line by lin
+my $section = "";
+while (my $line = <$watsonrc>){
+    print $line;
+    # Ignore full line comments
+    if ($line !~ m/^#/ && $line =~ /\S/){		
+	# Regex to find [section], store into $section and continue to the next line until a new section
+	if ($line =~ /^\[(\w+)\]/){
+	    $section = $1;
+	    next;
 	}
+      	# If @dirs wasn't populated by CL args, populate from .watsonrc
+	if ($section eq "dirs"){
+	    if ($IGNORE_RC_DIRS == 1) {
+		print "Directories set from command line, ignoring .watsonrc [dirs]!\n";
+	    }
+	    else {
+                # Specific regex for dirs, then push to @dirs
+		$line =~ /^((\/?\w+\/?)+)/;
+		$line = $1;
+		$line =~ s/(\/)+$//;
+		print "dirs: $line added from rc. \n";
+		push(@DIRS, $line);
+	    }
+	}
+	
+	
+	# Specific regex for tags, then push to @tags
+	elsif ($section eq "tags"){
+	    $line =~ /^(\w+( \| [0-9])?)/;
+	    print "tags: $1 added from rc. \n";
+	    push(@TAGS, $1);
+	}
+    } 
 }
+
 print "\n\n\n";
 
 
 
 
 # For each directory obtained from .watsonrc or CL, look for files in them
-foreach my $dir (@dirs){
-	push(@structure, parseDirs($dir));
+foreach my $dir (@DIRS){
+	push(@STRUCTURE, parseDirs($dir));
 	#print Dumper(@structure);
 
 
@@ -188,27 +161,31 @@ foreach my $dir (@dirs){
         #}
 }
 
+<<<<<<< HEAD
+#print Dumper(@STRUCTURE);
+=======
 #print Dumper(@structure);
+>>>>>>> b640e1da60158cf1b27f5107bddeebf6826f52d5
 
 # Display block
-foreach $entry (@structure){
+foreach my $entry (@STRUCTURE){
 	printResults($entry);
 }
 
 sub printResults {
 	my ($entry) = @_;
-	for ($i = 0; $i < scalar( @{$entry->{files}}); $i++){
+	for (my $i = 0; $i < scalar( @{$entry->{files}}); $i++){
 		print $entry->{files}[$i]->{filename}, "\n";
-		foreach $tag (@tags){
+		foreach my $tag (@TAGS){
 			printf "\t\[$tag\]\n";
-			for ($j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
+			for (my $j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
 				print "\t$entry->{files}[$i]->{$tag}[$j]->{linenumber} - ";
 				print "$entry->{files}[$i]->{$tag}[$j]->{comment} \n";
 			}
 		}
 	}
 
-	for ($i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
+	for (my $i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
 		printResults($entry->{dirs}[$i]);
 	}
 }
@@ -232,31 +209,35 @@ sub parseFile {
 	seek(FILE, 0, 0);						 
 
 	# Initialize tag arrays so they are globally avaliable
-	foreach $tag (@tags){
-		@{$tag};
+	foreach my $tag (@TAGS){
+	    print "Creating array named $tag \n";
+	    @{$tag};
 	}
 
 	# Read source file line by line
 	my $linecount = 0;
 	while (my $line = <FILE>){
-		$linecount++;
-		# Find any comment line with [tag] - text (any comb of space and #)
-		if ($line =~ /^#+\s*\[(\w+)\]\s*-\s*(.+)/){
-			foreach my $tag (@tags){
-				if ($1 eq $tag){
-					
-					# Create hash for each issue found (for each tag)
-					$issue = {};
-					$issue->{linenumber} = $linecount;
-					$issue->{comment} = $2;
-					push(@{$tag}, $issue);
-				}
-			}
+	    $linecount++;
+	    # Find any comment line with [tag] - text (any comb of space and #)
+	    if ($line =~ /^#+\s*\[(\w+)\]\s*-\s*(.+)/) {
+		print "Found an issue: $2\n";
+		foreach my $tag (@TAGS) {
+		    if ($1 eq $tag) {
+			
+			# Create hash for each issue found (for each tag)
+			my $issue = {};
+			$issue->{linenumber} = $linecount;
+			$issue->{comment} = $2;
+			push(@{$tag}, $issue);
+		    }
 		}
+	    }
 	}
 
 	#[fixme] - change name to issueList
 	my $issues = {};
+<<<<<<< HEAD
+=======
 	$issues->{filename} = "$file"; 
 	foreach $tag (@tags){
 		$issues->{$tag} = [@{$tag}];
@@ -264,7 +245,15 @@ sub parseFile {
 		#print $issues->{filename}, "\n";
 		undef @{$tag};
 	}
+>>>>>>> b640e1da60158cf1b27f5107bddeebf6826f52d5
 
+	$issues->{filename} = "$file";
+	# Toss on each tag found into the file's hash
+	foreach my $tag (@TAGS){
+	       	$issues->{$tag} = [@{$tag}];
+		print Dumper($issues);
+		undef @{$tag};       		
+	}
 	return $issues;
 	
 }
@@ -305,7 +294,7 @@ sub parseDirs {
 	print "while loop starting. \n";
 	my @dirlist = sort(readdir($pd));
 
-	foreach $entry (@dirlist){
+	foreach my $entry (@dirlist){
 		# Ignore . and ..
 		if ($entry ne "." && $entry ne ".." && $entry ne ".git" && $entry ne ".gitignore"){
 			# Check if entry is a file, if so parse
@@ -322,7 +311,7 @@ sub parseDirs {
 
 	closedir($pd);
 
-	$structure = {};
+	my $structure = {};
 	$structure->{files} = \@pfiles;
 	$structure->{dirs} = \@pdirs;
 
@@ -354,8 +343,8 @@ sub checkDir {
 
 # printRC - creates default .watsonrc
 sub createRC {
-	my ($file) = @_;
-
+    my $file_name = shift;
+    open(my $file, "+>>", ".watsonrc");
 # [fixme] - Figure out a way to indent this?
 my $rcdefault = <<EOF; 
 # .watsonrc
@@ -374,6 +363,7 @@ fixme
 reviewme
 EOF
 
+    print $rcdefault;
 	# Print default .watsonrc above to specified file
 	print $file $rcdefault;
 	return 1;
