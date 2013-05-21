@@ -1,5 +1,5 @@
-# .watsonrc
-# watson - collaborative code tool
+# watson rc
+# watson - inline issue manager
 # [goosecode] labs / 2012
 
 
@@ -9,8 +9,11 @@ src/
 
  
 # Tags 
-# tagname 
-# tagname - name of tag to look for (without []) 
 [tags] 
 fixme 
 reviewme
+todo
+
+
+[ignore]
+.git

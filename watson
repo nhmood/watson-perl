@@ -1,354 +1,278 @@
 #!/usr/bin/perl
-# watson - collaborative code tool
+# watson - inline issue manager
 # Original Author: nhmood @ [goosecode labs] | 2012
 # Contributor: eugenek @ [goosecode labs] | 2012
 # Copyright (c) 2012-2013 goosecode labs
 # See the file LICENSE for copying permission
 
-# Todo:
-# [!] - .watsonrc - hold config on what tags to search for
-#  		take user command line arg
-# [!] - put in pretty colors on terminal prompts/prints
-# [!] - add Todo: listings as well as fixreviewme tags
-# [!] - set tags through command line (only supports dirs now)
-# [!] - add priority listing for tags and todo
-# [!] - generate .html file with report
-# [!] - add text editor/jump to code for each item in .html report
-# [!] - feed output to less and change color prints 
-# [!] - command line option to not create .watsonrc
-# [!] - allow for single file usage instead of folder
-# [!] - break everything into functions
-# [!] - better error checking
-# [!] - if x is placed in todo [!] then move it to separate file
-# [!] - have option to export tags/todo to github/bitbucket issue tracker
-# [!] - add function and ask user to send phonehome to keep track of stats
-# [!] - add ability to generate error report(s)?
-# 		turn on/off strict/warning and pipe (for perl for example)
-# [!] - reformat how tag comments are defined
-#		line on tag is short comment
-#		all lines that are commented AFTER tag BEFORE newline are long comment
-# [!] - changelist such that if a tag is replaced with its matching fixed
-#		remove issue (resolve) on github/bitbucket, put it into list of fixed
-#		issues, and modify source to remove tag (optional) 
-# [!] - store in separate file or parse every time? (thinking parse)
+
+# [todo] - command line arg for tags, ignore, createrc, other options
+# [todo] - command line for file/folder (allow individual)
+# [todo] - add priority listing for tags and todo
+# [todo] - generate .html file with report
+# [todo] - add text editor/jump to code for each item in .html report
+# [todo] - if x is placed in todo [!] then move it to separate file
+# [todo] - have option to export tags/todo to github/bitbucket issue tracker
+# [todo] - add function and ask user to send phonehome to keep track of stats
+# [todo] - changelist such that if a tag is replaced with its matching fixed
+#  		   remove issue (resolve) on github/bitbucket, put it into list of fixed
+#  		   issues, and modify source to remove tag (optional) 
+# [todo] - store in separate file or parse every time? (thinking parse)
+# [todo] - tell when directory changes with some header
+# [todo] - support other comment types
 
 
 
+###########################################################
+# Global parameters 
+###########################################################
 
-# [reviewme] - Should I be using strict/warnings?
+# For testing
 #use strict;
-use warnings;
+#use warnings;
 
 # For color print outs
-#use Term::ANSIColor;
+use Term::ANSIColor qw(:constants);
 
-# For visualizing structures
+# For debugging (print data structures)
 use Data::Dumper;
 
+# App Config
+my $DEBUG = 0;
+my $RCNAME = ".watsonrc";	# Change config file name
+my $TMPOUT = ".tmpout";		# Change tmp file name
 
 # Global variables
 my @DIRS;
 my @TAGS;
 my @STRUCTURE;
+my @IGNORELIST;
 my $IGNORE_RC_DIRS = 0;
+my $HASLESS = 0;
+my $LESSOUT;
 
 
-# Print watson header
-# [reviewme] - clear might not be portable 
-# Clear screen and set to top
-print "\033[2J \033[0;0H";  
+#----------------------------------------------------------
+###########################################################
+# Main Program 
+###########################################################
+#----------------------------------------------------------
+
+checkLess();
+printHeader();
+parseCommandLine();
+checkConfig();
+parseConfig();
+startScan();
+createReport();
 
 
-# Header info
-print "watson - collaborative code tool \n";
-print "nhmood @ [goosecode] 2012 \n\n";
+#----------------------------------------------------------
+###########################################################
+# Functions 
+###########################################################
+#----------------------------------------------------------
 
 
-# Open/create .watsonrc
-print "[Checking for .watsonrc] \n";
+###########################################################
+# Debug Print Function
+###########################################################
 
-# -z checks if filesize is 0
-if ( -z ".watsonrc"){
-	print ".watsonrc not found! \n";
-	print "Creating default .watsonrc \n";
-
-	# Create default .watsonrc
-	createRC(".watsonrc");
-}
-else {
-	print ".watsonrc found \n\n";
-}
-
-
-# Parse command line arguments
-# Check args, only takes dirs for now
-print "[Checking CL args]\n";
-if ($#ARGV > -1){
-	# Try to open each arg (as a directory)
-	# If valid, push into @dirs array, else let user know
-	foreach my $arg (@ARGV){
-		if (checkDir($arg)){
-			$arg =~ s/(\/)+$//;
-			print "dirs: {$arg} valid directory, added from CL. \n";
-			push(@DIRS, $arg);
-			$IGNORE_RC_DIRS = 1;
-			print "Ignoring RC directories\n";
-		}
-	}
-	print "\n";
-}
-else {
-	print "No command line arguments passed.\n";
-	print "\n";
-
-}
-
-
-# Parse .watsonrc
-print "Parsing .watsonrc\n";
-open(my $watsonrc, "<", ".watsonrc");
-# Read .watsonrc line by lin
-my $section = "";
-while (my $line = <$watsonrc>){
-    print $line;
-    # Ignore full line comments
-    if ($line !~ m/^#/ && $line =~ /\S/){		
-	# Regex to find [section], store into $section and continue to the next line until a new section
-	if ($line =~ /^\[(\w+)\]/){
-	    $section = $1;
-	    next;
-	}
-      	# If @dirs wasn't populated by CL args, populate from .watsonrc
-	if ($section eq "dirs"){
-	    if ($IGNORE_RC_DIRS == 1) {
-		print "Directories set from command line, ignoring .watsonrc [dirs]!\n";
-	    }
-	    else {
-                # Specific regex for dirs, then push to @dirs
-		$line =~ /^((\/?\w+\/?)+)/;
-		$line = $1;
-		$line =~ s/(\/)+$//;
-		print "dirs: $line added from rc. \n";
-		push(@DIRS, $line);
-	    }
-	}
-	
-	
-	# Specific regex for tags, then push to @tags
-	elsif ($section eq "tags"){
-	    $line =~ /^(\w+( \| [0-9])?)/;
-	    print "tags: $1 added from rc. \n";
-	    push(@TAGS, $1);
-	}
-    } 
-}
-
-print "\n\n\n";
-
-
-
-
-# For each directory obtained from .watsonrc or CL, look for files in them
-foreach my $dir (@DIRS){
-	push(@STRUCTURE, parseDirs($dir));
-	#print Dumper(@structure);
-
-
-        #print Dumper(parseDirs($dir)->{files}[0]);
-
-        #if (parseDirs($dir) == 0){
-        #        print "$dir could not be opened.\n";
-        #}
-}
-
-<<<<<<< HEAD
-#print Dumper(@STRUCTURE);
-=======
-#print Dumper(@structure);
->>>>>>> b640e1da60158cf1b27f5107bddeebf6826f52d5
-
-# Display block
-foreach my $entry (@STRUCTURE){
-	printResults($entry);
-}
-
-sub printResults {
-	my ($entry) = @_;
-	for (my $i = 0; $i < scalar( @{$entry->{files}}); $i++){
-		print $entry->{files}[$i]->{filename}, "\n";
-		foreach my $tag (@TAGS){
-			printf "\t\[$tag\]\n";
-			for (my $j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
-				print "\t$entry->{files}[$i]->{$tag}[$j]->{linenumber} - ";
-				print "$entry->{files}[$i]->{$tag}[$j]->{comment} \n";
-			}
-		}
-	}
-
-	for (my $i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
-		printResults($entry->{dirs}[$i]);
-	}
-}
-
-sub parseFile {
-	# [fixme] - need a better check for valid files (when using @_)
-	my ($file) = @_;
-	print "parseFile: $file\n";
-	if (!length($file)){
-		print "No file specified.\n";
-		return 0;
-	}
-
-	my $fh = open(FILE, "<", $file);
-	if (!$fh){
-		printf "Could not open $file! \n";
-		return 0;
-	}
-
-	# Go to beginning of the file
-	seek(FILE, 0, 0);						 
-
-	# Initialize tag arrays so they are globally avaliable
-	foreach my $tag (@TAGS){
-	    print "Creating array named $tag \n";
-	    @{$tag};
-	}
-
-	# Read source file line by line
-	my $linecount = 0;
-	while (my $line = <FILE>){
-	    $linecount++;
-	    # Find any comment line with [tag] - text (any comb of space and #)
-	    if ($line =~ /^#+\s*\[(\w+)\]\s*-\s*(.+)/) {
-		print "Found an issue: $2\n";
-		foreach my $tag (@TAGS) {
-		    if ($1 eq $tag) {
-			
-			# Create hash for each issue found (for each tag)
-			my $issue = {};
-			$issue->{linenumber} = $linecount;
-			$issue->{comment} = $2;
-			push(@{$tag}, $issue);
-		    }
-		}
-	    }
-	}
-
-	#[fixme] - change name to issueList
-	my $issues = {};
-<<<<<<< HEAD
-=======
-	$issues->{filename} = "$file"; 
-	foreach $tag (@tags){
-		$issues->{$tag} = [@{$tag}];
-		#print Dumper($issues->{$tag}[0]);
-		#print $issues->{filename}, "\n";
-		undef @{$tag};
-	}
->>>>>>> b640e1da60158cf1b27f5107bddeebf6826f52d5
-
-	$issues->{filename} = "$file";
-	# Toss on each tag found into the file's hash
-	foreach my $tag (@TAGS){
-	       	$issues->{$tag} = [@{$tag}];
-		print Dumper($issues);
-		undef @{$tag};       		
-	}
-	return $issues;
-	
-}
-
-
-# Parse source files in specified directories for 
-sub parseDirs {
-	my ($dir) = @_;
-	print "parseDirs: $dir\n";
-
-	my @pdirs;
-	my @pfiles;
-
-
-	# [fixme] - Replace with global directory checker (exist + open)
-	# Error check for input
-	if (length($dir) == 0){
-		print "No directories specified. \n";
-		return 0;
-	}
-
-	# [fixme] - add option to stop from going deeper dirs (depth?)
-	# Check if folder is valid and then read files in directory
-	# If other folders are found, parse those as well
-	# If file, pass through parseFile 
-	
-	# Error check directory
-	opendir(my $pd, $dir);
-	if (!$pd){
-		print "$dir cannot be opened. \n";
-		return -1;
-	}
-	print "$dir opened. \n";
-
-
-	# [fixme] - get list in alphabetical order (looks better on output)
-	# Loop through all entries in directory
-	print "while loop starting. \n";
-	my @dirlist = sort(readdir($pd));
-
-	foreach my $entry (@dirlist){
-		# Ignore . and ..
-		if ($entry ne "." && $entry ne ".." && $entry ne ".git" && $entry ne ".gitignore"){
-			# Check if entry is a file, if so parse
-			if (-f "$dir/$entry"){
-				print "$dir/$entry is a file!\n";
-				push(@pfiles, parseFile("$dir/$entry"));
-			}
-			elsif (-d "$dir/$entry"){
-				print "$dir/$entry is a dir!\n";
-				push(@pdirs, parseDirs("$dir/$entry"));
-			}
-		}
-	}
-
-	closedir($pd);
-
-	my $structure = {};
-	$structure->{files} = \@pfiles;
-	$structure->{dirs} = \@pdirs;
-
-	return $structure;
-
-}
-
-
-
-# Functions
-
-
-# checkDir - checks if directory exists
-sub checkDir {
-	my ($dir) = @_;
-	# Error check for input
-	if (length($dir) == 0){
-		print "No directories specified.\n";
-		return 0;
-	}
-	# Check if directory can be opened
-	if (!opendir(DIR, $dir)){
-		print "$dir is not a directory, skipping.\n";
-		return -1;
+# Debug print statements that are only enabled
+# when debug flag is set (top of file)
+sub debugPrint {
+	if ($DEBUG){
+		print @_;
 	}
 	return 1;
 }
 
 
-# printRC - creates default .watsonrc
+###########################################################
+# Unix Less Checker
+###########################################################
+
+# Check to see if system has less
+# If so, set flag and open tmp file
+sub checkLess {
+	if (! system("which less > /dev/null 2>&1") ){
+		open($LESSOUT, "+>>", $TMPOUT);
+		$HASLESS = 1;
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+
+###########################################################
+# Output Print Function
+###########################################################
+
+# If system has less, dump all output to .tmp file and use less
+# If no less, just print straight to stdout
+sub wprint {
+	my ($line) = @_;
+	
+	if ($HASLESS){
+		print $LESSOUT "$line";
+		return 1;
+	}
+	else {
+		print "$line";
+		return 0;
+	}
+}
+
+
+###########################################################
+# Header Print Function 
+###########################################################
+
+# Print watson header
+sub printHeader {
+	wprint(BOLD "---------------------------\n");
+	wprint(BOLD "watson", RESET);
+	wprint(" - ");
+	wprint(BOLD YELLOW "code review tool\n", RESET);
+	#wprint(BOLD "nhmood ", RESET);
+	#wprint("@ [");
+	#wprint(BOLD YELLOW "goosecode", RESET);
+	#wprint("] ");
+	#wprint(BOLD YELLOW "labs \n", RESET);
+	wprint(BOLD "---------------------------\n\n");
+	return 1;
+}
+
+
+###########################################################
+# Directory checker  
+###########################################################
+
+# checkDir - checks if directory can be opened 
+# Different from just using -d, checks if able to OPEN
+sub checkDir {
+	my ($dir) = @_;
+	# Error check for input
+	if (length($dir) == 0){
+		wprint("No directories specified.\n");
+		return 0;
+	}
+	# Check if directory can be opened
+	my $success = opendir(my $tDIR, $dir);
+	if (!$success){
+		wprint("Cannot open dir: |$dir|, skipping.\n");
+		return 0;
+	}
+
+	closedir($tDIR);	
+	debugPrint("|$dir| exists and opened successfully.\n");
+	return 1;
+}
+
+
+###########################################################
+# File checker  
+###########################################################
+
+# checkFile - checks if file can be opened
+# Different from just using -f, checks if able to OPEN
+sub checkFile {
+	my ($file) = @_;
+	# Error check for input
+	if (length($file) == 0){
+		wprint("No file specified.\n");
+		return 0;
+	}
+
+	# Check if file can be opened
+	my $success = open(my $tFILE, $file);
+	if (!$success){
+		wprint("Could not open |$file|, skipping.\n");
+		return 0;
+	}
+
+	close($tFILE);
+	debugPrint("|$file| exists and opened successfully.\n");
+	return 1;
+}
+
+
+###########################################################
+# Command line parsing 
+###########################################################
+
+# Go through command line arguments and set states accordingly
+sub parseCommandLine {
+	# Parse command line arguments
+	# [fixme] - Only takes dirs for now, add other options later
+	# [fixme] - Allow taking individual file (-f)
+	debugPrint("[Checking CL args]\n");
+	if ($#ARGV > -1){
+		# Try to open each arg (as a directory)
+		# If valid, push into @DIRS array, else let user know
+		foreach my $arg (@ARGV){
+			if (checkDir($arg)){
+				debugPrint("dirs: {$arg} valid directory, added from CL. \n");
+	
+				# Remove trailing slashes
+				$arg =~ s/(\/)+$//;
+				push(@DIRS, $arg);
+	
+				$IGNORE_RC_DIRS = 1;
+				debugPrint("Ignoring RC directories\n\n");
+			}
+		}
+		return 1;
+	}
+	else {
+		debugPrint("No command line arguments passed.\n\n");	
+		return 0;
+	}
+}
+
+
+###########################################################
+# Config file check
+###########################################################
+
+# Check for config file in same dir as watson
+# If it doesn't exist, create the default one
+sub checkConfig {
+	# Should have individual .rc for each dir that watson is in
+	# This allows you to keep different preferences for different projects
+	
+	# Check for rc
+	# -z checks if filesize is 0
+	debugPrint("[Checking for $RCNAME] \n");
+	if (! -e "$RCNAME"){
+		debugPrint("$RCNAME not found! \n");
+		debugPrint("Creating default $RCNAME \n");
+	
+		# Create default rc
+		createRC("$RCNAME");
+		return 0;
+	}
+	else {
+		debugPrint("$RCNAME found \n\n");
+		return 1;
+	}
+}
+
+
+###########################################################
+# Default config file writer 
+###########################################################
+
+# Create default RC file with some generic settings
 sub createRC {
     my $file_name = shift;
-    open(my $file, "+>>", ".watsonrc");
+    open(my $file, "+>>", "$RCNAME");
 # [fixme] - Figure out a way to indent this?
 my $rcdefault = <<EOF; 
-# .watsonrc
-# watson - collaborative code tool
+# watson rc
+# watson - inline issue manager
 # [goosecode] labs / 2012
 \n
 # Directories 
@@ -356,16 +280,405 @@ my $rcdefault = <<EOF;
 src/
 \n 
 # Tags 
-# tagname
-# tagname - name of tag to look for (without []) 
 [tags] 
 fixme 
 reviewme
+todo
+\n
+[ignore]
+.git
 EOF
 
-    print $rcdefault;
-	# Print default .watsonrc above to specified file
-	print $file $rcdefault;
+    debugPrint($rcdefault);
+	# Print default rc above to specified file
+	# [fixme] - Get return 
+	my $success = print $file $rcdefault;
+	close($file);
+	return $success;
+}
+
+
+###########################################################
+# Config file parsing 
+###########################################################
+
+# Go through config file and determine dirs, tags, and ignores to use
+sub parseConfig {
+	# Parse rc
+	debugPrint("Parsing $RCNAME\n");
+	
+	open(my $rc, "<", "$RCNAME");
+	
+	# Add . and .. and .git to ignorelist 
+	push(@IGNORELIST, ".");
+	push(@IGNORELIST, "..");
+	push(@IGNORELIST, "*.swp");
+	push(@IGNORELIST, $TMPOUT);
+	
+	
+	# Read rc line by line
+	my $section = "";
+	while (my $line = <$rc>){
+	    debugPrint($line);
+	    
+		# Ignore full line comments
+	    if ($line !~ m/^#/ && $line =~ /\S/){		
+			# Regex to find [section], store into $section and continue to the
+			# next line until a new section
+			if ($line =~ /^\[(\w+)\]/){
+			    $section = $1;
+			    next;
+			}
+	    	
+			# If @DIRS wasn't populated by CL args, populate from rc
+			if ($section eq "dirs"){
+			    if ($IGNORE_RC_DIRS == 1) {
+					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+			    }
+			    else {
+	    	        # Regex for dirs, then push to @DIRS
+					$line =~ /^((\/?\w+\/?)+)/;
+					$line = $1;
+					$line =~ s/(\/)+$//;
+					debugPrint("dirs: $line added from rc. \n");
+					push(@DIRS, $line);
+			    }
+			}
+			
+			# Regex for tags, then push to @TAGS
+			elsif ($section eq "tags"){
+			    $line =~ /^(\w+( \| [0-9])?)/;
+			    debugPrint("tags: $1 added from rc. \n");
+			    push(@TAGS, $1);
+			}
+	
+			# Regex for dirs to ignore, then push to @IGNOREDIR
+			elsif ($section eq "ignore"){
+				$line =~ /^((\/?\w+\/?)+)/;
+				$line = $1;
+				$line =~ s/(\/)+$//;
+				debugPrint("ignore: $line added from rc.\n");
+				push(@IGNORELIST, $line);
+			}
+	    } 
+	}
+	#print Dumper(@TAGS);
+	debugPrint("\n\n\n");
+	close($rc);
+	return 1;
+}	
+
+
+###########################################################
+# Directory parsing 
+###########################################################
+
+# Start going through all files and subdirs of specified folder
+sub  startScan{
+	# For each directory obtained from rc or CL, look for files in them
+	foreach my $dir (@DIRS){
+		push(@STRUCTURE, parseDirs($dir));
+	}
+	wprint("\n");
+	return 1;
+}
+
+
+###########################################################
+# Directory Parser
+###########################################################
+
+# Look through directory for files to parse
+sub parseDirs {
+	my ($dir) = @_;
+	debugPrint("parseDirs: |$dir|\n");
+
+	my @pdirs;		# subdirectories found
+	my @pfiles;		# files found
+
+
+	# Error check for input
+	if (!checkDir($dir)){
+		return 0;
+	}
+	
+	# [fixme] - add option to stop from going deeper dirs (depth?)
+	# [fixme] - get list in alphabetical order (looks better on output)
+	# Loop through all entries in directory
+	debugPrint("Looping through all files/folders in |$dir|\n");
+
+	# Open dir and get list of all files	
+	opendir(my $wd, $dir);
+	my @dirlist = sort(readdir($wd));
+
+	foreach my $entry (@dirlist){
+		# Create singular $path var to parse
+		# Remove trailing slashes
+		$dir =~ s/^(\/)+$//;
+		
+		# Combine dir and entry to make full path
+		my $path = "$dir/$entry";
+
+		# Remove leading ., /, or ./
+		$path =~ s/^((\.)?(\/)?)//; 
+
+		debugPrint("path: |$path|\n");
+
+		# Make sure it isn't part of ignored list
+		# If it is, set to "", won't pass dir/file check
+		# [reviewme] - Should we warn users when file is ignored on stdout?
+		foreach my $ignore (@IGNORELIST){
+			# Check for any *.type in ignore list (list .swp)
+			# Regex to see if extension is .type, ignore if so 
+			if ( substr($ignore, 0, 1) eq "*" ){
+				my $ignoretype = substr($ignore, 1);
+				if ( $entry =~ m/$ignoretype$/ ){
+					debugPrint("|$path| is on the ignore list, setting to nothing\n");
+					$path = "";
+				}
+			}
+			elsif ("$entry" eq "$ignore"){
+				debugPrint("|$path| is on the ignore list, setting to nothing\n");
+				$path = "";
+				last;
+			}
+		}
+		
+		# Check if entry is a file, if so parse
+		if (-f "$path"){
+			debugPrint("|$path| is a file!\n");
+			push(@pfiles, parseFile("$path"));
+		}
+
+		# Check if entry is dir, if so parse
+		elsif (-d "$path"){
+			debugPrint("|$path| is a dir!\n");
+			push(@pdirs, parseDirs("$path"));
+		}
+		
+	}
+
+	closedir($wd);
+	# Create has to hold all parsed files and folders
+	my $structure = {};
+
+	# Still confused as to what this is actually doing but...
+	# Storing an array of hashes into structure->file hash
+	# I THINK?? that because the array consists of hashes (references)
+	# the \@pfiles will copy the actual values (or keep the references alive?)
+	# Either way, some scoping thing is solved with \@
+	
+	$structure->{files} = \@pfiles;
+	$structure->{dirs} = \@pdirs;
+
+	return $structure;
+}
+
+
+###########################################################
+# File Parser
+###########################################################
+
+sub parseFile {
+	# [fixme] - need a better check for valid files (when using @_)
+	my ($file) = @_;
+	debugPrint("parseFile: |$file|\n");
+
+	# Error check for input
+	if (!checkFile($file)){
+		return 0;
+	}
+
+	# Get filetype and set corresponding comment type
+	my $comment = getComment($file);
+	if (!$comment){
+		wprint(BOLD "[ ", RESET);
+		wprint(BOLD MAGENTA "! ", RESET);
+		wprint(BOLD "] ", RESET);
+		wprint("--> ", RESET);
+		wprint("Couldn't determine filetype for $file, using # as comment\n", RESET);
+		$comment = "#";
+	}
+
+	# Open file and seek to beginning
+	open(my $wf, "<", $file);
+	seek($wf, 0, 0);						 
+
+	# Initialize tag arrays so they are globally avaliable
+	foreach my $tag (@TAGS){
+	    debugPrint("Creating array named $tag \n");
+	    @{$tag};
+	}
+
+	# Read source file line by line
+	my $linecount = 0;
+	while (my $line = <$wf>){
+	    $linecount++;
+	    # Find any comment line with [tag] - text (any comb of space and #)
+	    if ($line =~ /\s*($comment)+\s*\[(\S+)\]\s*-\s*(.+)/) {
+			my $fissue = $3;
+			my $ftag = $2;
+			debugPrint("Issue found!\n");
+			debugPrint("Tag: $ftag\n");		
+			debugPrint("Issue: $fissue\n");
+		
+			foreach my $tag (@TAGS) {
+		    	if ($ftag eq $tag) {
+					# Create hash for each issue found (for each tag)
+					my $issue = {};
+					$issue->{linenumber} = $linecount;
+					$issue->{comment} = $fissue;
+					push(@{$tag}, $issue);
+		    	}
+			}
+	    }
+	}
+
+	#[fixme] - change name to issueList
+	my $issueList = {};
+	$issueList->{filename} = "$file";
+	
+	# Toss on each tag found into the file's hash
+	foreach my $tag (@TAGS){
+	       	$issueList->{$tag} = [@{$tag}];
+		debugPrint(Dumper($issueList));
+		undef @{$tag};       		
+	}
+	return $issueList;
+}
+
+
+###########################################################
+# File Parser
+###########################################################
+
+# Determine comment type from file extension
+sub getComment {
+	my ($file) = @_;
+	debugPrint("Getting comment type\n");
+
+	# Grab the ending extension (.something)
+	# Check to see whether it is recognized and set comment type
+	# If unrecognized, try to grab next .something extension
+	# This is to account for file.cpp.1 or file.cpp.bak, ect
+	
+	while ( (my $ext) = $file =~ m/(\.(\w+))$/){
+		# Regex for last extension
+		debugPrint("Extension: $ext\n");
+
+		# Determine file type
+		# Not using switch/case for compatibility...
+		
+		# C / C++
+		if ( $ext eq ".cpp" || $ext eq ".cc" ||  $ext eq ".c" || $ext eq ".h"){
+			debugPrint("Comment type is: //\n");
+			return "//";
+		}
+		# Bash / Ruby / Perl	
+		elsif ( $ext eq ".sh" || $ext eq ".rb" || $ext eq ".pl"){
+			debugPrint("Comment type is: #\n");
+			return "#";
+		}
+
+		# Can't recognize extension, keep looping
+		else {
+			$file =~ s/(\.(\w+))$//;
+			debugPrint("Didn't recognize, new file: $file\n");
+		}
+	}
+	
+	# Didn't find any match, return error (and just use #)
+	return 0;
+}
+
+
+###########################################################
+# Print results  
+###########################################################
+
+# Format the parsed file data and output it nicely
+sub createReport {
+	# Display output for each file parsed 
+	foreach my $entry (@STRUCTURE){
+		printResults($entry);
+	}
+	
+	if ($HASLESS){
+		system("less $TMPOUT");
+		close($LESSOUT);
+		system("rm $TMPOUT > /dev/null 2>&1");
+	}
+	return 1;
+}
+
+
+###########################################################
+# Result Printer
+###########################################################
+
+# Print results from parsing all pretty and stuff
+sub printResults {
+	my ($entry) = @_;
+
+	# Go through and print info for all files first
+	for (my $i = 0; $i < scalar( @{$entry->{files}}); $i++){
+
+		# [fixme] - Same foreach performed below, combine somehow?
+
+		# Go through and see if there are any issues with given file
+		# Sets print color and whether to continue to print
+		my $issueflag = 0; 
+		foreach my $tag (@TAGS){
+			if (scalar( @{$entry->{files}[$i]->{$tag}})){
+				$issueflag++;
+			}
+		}
+		
+		if ($issueflag){
+			wprint("\n");
+			wprint(BOLD "[ ", RESET);
+			wprint(BOLD RED "x ", RESET);
+			wprint(BOLD "] ", RESET);
+			wprint(UNDERLINE BOLD RED "$entry->{files}[$i]->{filename}", RESET);
+		}
+		else {
+			wprint(BOLD "[ ", RESET);
+			wprint(BOLD GREEN "o ", RESET);
+			wprint(BOLD "] ", RESET);
+			wprint(UNDERLINE BOLD GREEN "$entry->{files}[$i]->{filename}", RESET);
+		}
+
+		#print UNDERLINE BOLD BLUE "$entry->{files}[$i]->{filename}", RESET;
+		wprint("\n");
+		
+		# If there are no issues, don't print anything (go to next file)
+		# Else, continue on and print the issues
+		($issueflag > 0) ? (1) : (next);	
+
+		# Cycle through all tags and print issues for each	
+		foreach my $tag (@TAGS){
+		
+			# If no issues in tag, don't print	
+			if (!scalar( @{$entry->{files}[$i]->{$tag}})){
+				next;
+			}
+		
+			# Print tag, line #, and issue	
+			wprint(BOLD  "\[ ", RESET);
+			wprint(BOLD BLUE "$tag", RESET);
+			wprint(BOLD  " \]\n", RESET);
+
+			for (my $j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
+				wprint(WHITE "  line $entry->{files}[$i]->{$tag}[$j]->{linenumber} - ", RESET);
+				wprint(BOLD "$entry->{files}[$i]->{$tag}[$j]->{comment} \n", RESET); 
+			}
+			wprint("\n");
+		}
+	}
+
+	for (my $i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
+		printResults($entry->{dirs}[$i]);
+	}
 	return 1;
 }
 

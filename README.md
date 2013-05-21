@@ -1,4 +1,4 @@
-watson - source collaboration tool
+watson - inline issue manager
 nhmood @ [goosecode] labs - 2012
 Copyright (c) 2012-2013 goosecode labs
 See the file LICENSE for copying permission
