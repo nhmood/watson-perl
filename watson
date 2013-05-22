@@ -20,8 +20,9 @@
 # [todo] - store in separate file or parse every time? (thinking parse)
 # [todo] - tell when directory changes with some header
 # [todo] - support other comment types
-
-
+# [todo] - allow using current dir (.) in watsonrc
+# [todo] - change default watsonrc to be in current dir (.)
+# [todo] - update repo dir to examples instead of src
 
 ###########################################################
 # Global parameters 
@@ -39,8 +40,8 @@ use Data::Dumper;
 
 # App Config
 my $DEBUG = 0;
-my $RCNAME = ".watsonrc";	# Change config file name
-my $TMPOUT = ".tmpout";		# Change tmp file name
+my $RCNAME = ".watsonrc";		# Change config file name
+my $TMPOUT = "watsonresults";	# Change tmp file name
 
 # Global variables
 my @DIRS;
@@ -96,7 +97,7 @@ sub debugPrint {
 # If so, set flag and open tmp file
 sub checkLess {
 	if (! system("which less > /dev/null 2>&1") ){
-		open($LESSOUT, "+>>", $TMPOUT);
+		open($LESSOUT, "+>", $TMPOUT);
 		$HASLESS = 1;
 		return 1;
 	}
@@ -277,7 +278,7 @@ my $rcdefault = <<EOF;
 \n
 # Directories 
 [dirs] 
-src/
+./
 \n 
 # Tags 
 [tags] 
@@ -337,7 +338,7 @@ sub parseConfig {
 			    }
 			    else {
 	    	        # Regex for dirs, then push to @DIRS
-					$line =~ /^((\/?\w+\/?)+)/;
+					$line =~ /^((\.?\/?\w?+\/?)+)/;
 					$line = $1;
 					$line =~ s/(\/)+$//;
 					debugPrint("dirs: $line added from rc. \n");
@@ -455,6 +456,9 @@ sub parseDirs {
 			debugPrint("|$path| is a dir!\n");
 			push(@pdirs, parseDirs("$path"));
 		}
+
+		# Add directory to ignore list so it isn't repeated again
+		push(@IGNORELIST, $path);
 		
 	}
 
