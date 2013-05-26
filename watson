@@ -15,14 +15,14 @@
 # [todo] - have option to export tags/todo to github/bitbucket issue tracker
 # [todo] - add function and ask user to send phonehome to keep track of stats
 # [todo] - changelist such that if a tag is replaced with its matching fixed
-#  		   remove issue (resolve) on github/bitbucket, put it into list of fixed
-#  		   issues, and modify source to remove tag (optional) 
+#		   remove issue (resolve) on github/bitbucket, put it into list of fixed
+#		   issues, and modify source to remove tag (optional) 
 # [todo] - store in separate file or parse every time? (thinking parse)
 # [todo] - tell when directory changes with some header
 # [todo] - support other comment types
-# [todo] - allow using current dir (.) in watsonrc
-# [todo] - change default watsonrc to be in current dir (.)
-# [todo] - update repo dir to examples instead of src
+# [todo] - change @IGNOREDIR to hash instead of array for efficiency
+# [todo] - only allow user to check executing users files (setuid exploit)
+# [todo] - allow single files in rc file (use different [files] section?)
 
 ###########################################################
 # Global parameters 
@@ -41,14 +41,18 @@ use Data::Dumper;
 # App Config
 my $DEBUG = 0;
 my $RCNAME = ".watsonrc";		# Change config file name
-my $TMPOUT = "watsonresults";	# Change tmp file name
+my $TMPOUT = ".watsonresults";	# Change tmp file name
 
 # Global variables
 my @DIRS;
+my @FILES;
 my @TAGS;
+my @IGNORE;
 my @STRUCTURE;
-my @IGNORELIST;
 my $IGNORE_RC_DIRS = 0;
+my $IGNORE_RC_FILES = 0;
+my $IGNORE_RC_TAGS = 0;
+my $IGNORE_RC_IGNORE = 0;
 my $HASLESS = 0;
 my $LESSOUT;
 
@@ -76,7 +80,71 @@ createReport();
 
 
 ###########################################################
-# Debug Print Function
+# Header Print 
+###########################################################
+
+# Print watson header
+sub printHeader {
+	wprint(BOLD "---------------------------\n");
+	wprint(BOLD "watson", RESET);
+	wprint(" - ");
+	wprint(BOLD YELLOW "code review tool\n", RESET);
+	wprint(BOLD "---------------------------\n\n");
+	return 1;
+}
+
+
+###########################################################
+# Help Print 
+###########################################################
+
+# Print watson help 
+sub printHelp {
+
+	print "Usage: watson [OPTION]...\n";
+	print "Running watson with no arguments will parse with settings in RC file\n";
+	print "If no RC file exists, default RC file will be created\n";
+
+	print "\n";
+	print "   -d, --dirs			list of directories to search in\n";
+	print "   -f, --files			list of files to search in\n";
+	print "   -h, --help			print help\n";
+	print "   -i, --ignore			list of files, directories, or filetypes (*.type) to ignore\n";
+	print "   -t, --tags			list of tags to search for\n";
+	print "   -v, --version		print watson version and info\n";
+	print "\n";
+
+	print "Any number of files, tags, dirs, and ignores can be listed after flag\n";
+	print "To use *.filetype identifier, encapsulate in \"\" to avoid shell substitutions \n";
+	print "\n";
+
+	print "Report bugs to: watson\@goosecode.com\n";
+	print "watson home page: <http://goosecode.com/projects/watson>\n";
+	print "[goosecode] labs | 2012-2013\n";
+
+	return 1;
+}
+
+
+###########################################################
+# Help Print 
+###########################################################
+
+# Print watson help 
+sub printVersion {
+
+	print "watson v1.1\n";
+	print "Copyright (c) 2012-2013 goosecode labs\n";
+	print "Licensed under MIT, see LICENSE for details\n";
+	print "\n";
+
+	print "Written by nhmood and others, see <http://goosecode.com/projects/watson>\n";
+	return 1;
+}
+
+
+###########################################################
+# Debug Print
 ###########################################################
 
 # Debug print statements that are only enabled
@@ -90,25 +158,7 @@ sub debugPrint {
 
 
 ###########################################################
-# Unix Less Checker
-###########################################################
-
-# Check to see if system has less
-# If so, set flag and open tmp file
-sub checkLess {
-	if (! system("which less > /dev/null 2>&1") ){
-		open($LESSOUT, "+>", $TMPOUT);
-		$HASLESS = 1;
-		return 1;
-	}
-	else {
-		return 0;
-	}
-}
-
-
-###########################################################
-# Output Print Function
+# Output Print
 ###########################################################
 
 # If system has less, dump all output to .tmp file and use less
@@ -128,22 +178,20 @@ sub wprint {
 
 
 ###########################################################
-# Header Print Function 
+# Unix less Checker
 ###########################################################
 
-# Print watson header
-sub printHeader {
-	wprint(BOLD "---------------------------\n");
-	wprint(BOLD "watson", RESET);
-	wprint(" - ");
-	wprint(BOLD YELLOW "code review tool\n", RESET);
-	#wprint(BOLD "nhmood ", RESET);
-	#wprint("@ [");
-	#wprint(BOLD YELLOW "goosecode", RESET);
-	#wprint("] ");
-	#wprint(BOLD YELLOW "labs \n", RESET);
-	wprint(BOLD "---------------------------\n\n");
-	return 1;
+# Check to see if system has less
+# If so, set flag and open tmp file
+sub checkLess {
+	if (! system("which less > /dev/null 2>&1") ){
+		open($LESSOUT, "+>", $TMPOUT);
+		$HASLESS = 1;
+		return 1;
+	}
+	else {
+		return 0;
+	}
 }
 
 
@@ -167,7 +215,7 @@ sub checkDir {
 		return 0;
 	}
 
-	closedir($tDIR);	
+	closedir($tDIR);
 	debugPrint("|$dir| exists and opened successfully.\n");
 	return 1;
 }
@@ -197,40 +245,6 @@ sub checkFile {
 	close($tFILE);
 	debugPrint("|$file| exists and opened successfully.\n");
 	return 1;
-}
-
-
-###########################################################
-# Command line parsing 
-###########################################################
-
-# Go through command line arguments and set states accordingly
-sub parseCommandLine {
-	# Parse command line arguments
-	# [fixme] - Only takes dirs for now, add other options later
-	# [fixme] - Allow taking individual file (-f)
-	debugPrint("[Checking CL args]\n");
-	if ($#ARGV > -1){
-		# Try to open each arg (as a directory)
-		# If valid, push into @DIRS array, else let user know
-		foreach my $arg (@ARGV){
-			if (checkDir($arg)){
-				debugPrint("dirs: {$arg} valid directory, added from CL. \n");
-	
-				# Remove trailing slashes
-				$arg =~ s/(\/)+$//;
-				push(@DIRS, $arg);
-	
-				$IGNORE_RC_DIRS = 1;
-				debugPrint("Ignoring RC directories\n\n");
-			}
-		}
-		return 1;
-	}
-	else {
-		debugPrint("No command line arguments passed.\n\n");	
-		return 0;
-	}
 }
 
 
@@ -268,8 +282,8 @@ sub checkConfig {
 
 # Create default RC file with some generic settings
 sub createRC {
-    my $file_name = shift;
-    open(my $file, "+>>", "$RCNAME");
+	my $file_name = shift;
+	open(my $file, "+>>", "$RCNAME");
 # [fixme] - Figure out a way to indent this?
 my $rcdefault = <<EOF; 
 # watson rc
@@ -290,7 +304,7 @@ todo
 .git
 EOF
 
-    debugPrint($rcdefault);
+	debugPrint($rcdefault);
 	# Print default rc above to specified file
 	# [fixme] - Get return 
 	my $success = print $file $rcdefault;
@@ -300,7 +314,190 @@ EOF
 
 
 ###########################################################
-# Config file parsing 
+# Command line parser 
+###########################################################
+
+# Parse command line arguments
+sub parseCommandLine {
+	debugPrint("[Checking CL args]\n");
+	debugPrint("Total args: ", $#ARGV + 1, "\n");
+	# Check number of command lines, skip if invalid
+	if ($#ARGV > -1){
+		for (my $i = 0; $i < $#ARGV + 1; $i++){
+			debugPrint("Main Index: $i: $ARGV[$i]\n");		
+		
+			if ($ARGV[$i] eq "-h" || $ARGV[$i] eq "--help"){
+				debugPrint("Help flag passed\n");
+				printHelp();		
+				exit 0;
+			}
+
+			if ($ARGV[$i] eq "-v" || $ARGV[$i] eq "--version"){
+				debugPrint("Version flag passed\n");
+				printVersion();
+				exit 0;
+			}
+	
+			if ($ARGV[$i] eq "-d" || $ARGV[$i] eq "--dirs"){
+				debugPrint("Dir flag passed\n");
+				# Keep track of number of args for when we exit loop
+				my $count = 0;
+
+				# Keep checking following options until another flag or end
+				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
+					# [fixme] - better way to check if its not a flag?
+					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
+						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
+						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
+						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+		
+						debugPrint("Dir Index: $j: $ARGV[$j]\n");
+						$count++;	
+						if (checkDir($ARGV[$j])){
+	
+							debugPrint("dirflag: {$ARGV[$j]} valid directory, added from CL.\n");
+	
+							# If we ever get into this, means CL passed
+							# Set RC ignore so we don't look at rc
+							debugPrint("Ignoring RC Files/Dirs\n\n");
+							$IGNORE_RC_DIRS = 1;
+	
+							# Remove trailing slashes
+							$ARGV[$j] =~ s/(\/)+$//;
+							push(@DIRS, $ARGV[$j]);
+						}
+					}
+					else {
+						debugPrint("Found a flag: $ARGV[$j]\n");
+						last;
+					}
+				}
+				# Set main loop index to correct value
+				$i += $count;
+				
+			}
+		
+
+			if ($ARGV[$i] eq "-f" || $ARGV[$i] eq "--files"){
+				debugPrint("File flag passed\n");
+				# Keep track of number of args for when we exit loop
+				my $count = 0;	
+
+				# Keep checking following options until another flag or end
+				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
+					# [fixme] - better way to check if its not a flag?
+					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
+						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
+						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
+						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+			
+						debugPrint("File Index: $j: $ARGV[$j]\n");
+						$count++;	
+						if (checkFile($ARGV[$j])){
+					
+							debugPrint("fileflag: {$ARGV[$j]} valid file, added from CL.\n");	
+	
+							# If we ever get into this, means CL passed
+							# Set RC ignore so we don't look at rc
+							debugPrint("Ignoring RC Files/Dirs\n\n");
+							$IGNORE_RC_FILES = 1;
+	
+							push(@FILES, $ARGV[$j]);
+						}
+					}
+					else {
+						debugPrint("Found a flag: $ARGV[$j]\n");
+						last;
+					}
+				}
+				# Set main loop index to correct value
+				$i += $count;
+			}
+	
+	
+			if ($ARGV[$i] eq "-t" || $ARGV[$i] eq "--tags"){
+				debugPrint("Tag flag passed\n");
+				# Keep track of number of args for when we exit loop
+				my $count = 0;
+
+				# Keep checking following options until another flag or end
+				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
+					# [fixme] - better way to check if its not a flag?
+					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
+						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
+						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
+						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					
+						debugPrint("Tag Index: $j: $ARGV[$j]\n");
+						$count++;	
+						
+						debugPrint("tagflag: {$ARGV[$j]} added from CL.\n");	
+	
+						# If we ever get into this, means CL passed
+						# Set RC ignore so we don't look at rc
+						debugPrint("Ignoring RC tags\n\n");
+						$IGNORE_RC_TAGS = 1;
+	
+						push(@TAGS, $ARGV[$j]);
+					}
+					else {
+						debugPrint("Found a flag: $ARGV[$j]\n");
+						last;
+					}
+				}
+				# Set main loop index to correct value
+				$i += $count;
+			}
+	
+
+			if ($ARGV[$i] eq "-i" || $ARGV[$i] eq "--ignore"){
+				debugPrint("Ignore flag passed\n");
+				# Keep track of number of args for when we exit loop				
+				my $count = 0;
+
+				# Keep checking following options until another flag or end
+				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
+					# [fixme] - better way to check if its not a flag?
+					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
+						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
+						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
+						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					
+						debugPrint("Ignore Index: $j: $ARGV[$j]\n");
+						$count++;	
+						
+						debugPrint("ignoreflag: {$ARGV[$j]} added from CL.\n");	
+	
+						# If we ever get into this, means CL passed
+						# Set RC ignore so we don't look at rc
+						debugPrint("Ignoring RC ignore\n\n");
+						$IGNORE_RC_IGNORE = 1;
+	
+						push(@IGNORE, $ARGV[$j]);
+					}
+					else {
+						debugPrint("Found a flag: $ARGV[$j]\n");
+						last;
+					}
+				}
+				# Set main loop index to correct value
+				$i += $count;
+			}
+		}
+	}
+	else {
+		debugPrint("No command line arguments passed.\n\n");	
+	}
+	return 1;
+}
+
+
+###########################################################
+# Config file parser
 ###########################################################
 
 # Go through config file and determine dirs, tags, and ignores to use
@@ -311,10 +508,10 @@ sub parseConfig {
 	open(my $rc, "<", "$RCNAME");
 	
 	# Add . and .. and .git to ignorelist 
-	push(@IGNORELIST, ".");
-	push(@IGNORELIST, "..");
-	push(@IGNORELIST, "*.swp");
-	push(@IGNORELIST, $TMPOUT);
+	push(@IGNORE, ".");
+	push(@IGNORE, "..");
+	push(@IGNORE, "*.swp");
+	push(@IGNORE, $TMPOUT);
 	
 	
 	# Read rc line by line
@@ -323,7 +520,7 @@ sub parseConfig {
 	    debugPrint($line);
 	    
 		# Ignore full line comments
-	    if ($line !~ m/^#/ && $line =~ /\S/){		
+	    if ($line !~ m/^#/ && $line =~ /\S/){
 			# Regex to find [section], store into $section and continue to the
 			# next line until a new section
 			if ($line =~ /^\[(\w+)\]/){
@@ -331,9 +528,9 @@ sub parseConfig {
 			    next;
 			}
 	    	
-			# If @DIRS wasn't populated by CL args, populate from rc
+			# If @DIRS or @FILES wasn't populated by CL args, populate from rc
 			if ($section eq "dirs"){
-			    if ($IGNORE_RC_DIRS == 1) {
+			    if ($IGNORE_RC_DIRS == 1 || $IGNORE_RC_FILES == 1) {
 					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
 			    }
 			    else {
@@ -346,24 +543,37 @@ sub parseConfig {
 			    }
 			}
 			
-			# Regex for tags, then push to @TAGS
+			# If @TAGS wasn't populated by CL args, populate from rc
 			elsif ($section eq "tags"){
-			    $line =~ /^(\w+( \| [0-9])?)/;
-			    debugPrint("tags: $1 added from rc. \n");
-			    push(@TAGS, $1);
+			    if ($IGNORE_RC_TAGS == 1) {
+					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+			    }
+				else {
+					# Regex for tags, then push to @TAGS
+			    	$line =~ /^(\w+( \| [0-9])?)/;
+			    	debugPrint("tags: $1 added from rc. \n");
+			    	push(@TAGS, $1);
+				}
 			}
 	
-			# Regex for dirs to ignore, then push to @IGNOREDIR
+			# If @IGNORE wasn't populated by CL args, populate from rc
 			elsif ($section eq "ignore"){
-				$line =~ /^((\/?\w+\/?)+)/;
-				$line = $1;
-				$line =~ s/(\/)+$//;
-				debugPrint("ignore: $line added from rc.\n");
-				push(@IGNORELIST, $line);
+			    if ($IGNORE_RC_IGNORE == 1) {
+					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+			    }
+				else {
+					# Regex for dirs to ignore, then push to @IGNOREDIR
+
+					$line =~ /^((\/?\w+\/?)+)/;
+					$line = $1;
+					$line =~ s/(\/)+$//;
+					debugPrint("ignore: $line added from rc.\n");
+					push(@IGNORE, $line);
+				}
 			}
 	    } 
 	}
-	#print Dumper(@TAGS);
+
 	debugPrint("\n\n\n");
 	close($rc);
 	return 1;
@@ -371,15 +581,33 @@ sub parseConfig {
 
 
 ###########################################################
-# Directory parsing 
+# File/Folder Parser Wrapper
 ###########################################################
 
 # Start going through all files and subdirs of specified folder
-sub  startScan{
+sub startScan{
+	
+	# If files passed to command line, push those to structure
+	# Have to populate structure this way to print properly
+	if ($IGNORE_RC_FILES){
+		# For each file obtained from CL (if any) parse file
+		# Create proper structure for files so we can push to @STRUCTURE
+		my $structure = {};
+		my @tfiles = ();
+		foreach my $file (@FILES){
+			push(@tfiles, parseFile($file));
+		}
+		
+		$structure->{files} = \@tfiles;
+		push(@STRUCTURE, $structure);
+	}
+
 	# For each directory obtained from rc or CL, look for files in them
+	# This will always be valid, not condition like files above
 	foreach my $dir (@DIRS){
 		push(@STRUCTURE, parseDirs($dir));
 	}
+
 	wprint("\n");
 	return 1;
 }
@@ -397,14 +625,12 @@ sub parseDirs {
 	my @pdirs;		# subdirectories found
 	my @pfiles;		# files found
 
-
 	# Error check for input
 	if (!checkDir($dir)){
 		return 0;
 	}
 	
 	# [fixme] - add option to stop from going deeper dirs (depth?)
-	# [fixme] - get list in alphabetical order (looks better on output)
 	# Loop through all entries in directory
 	debugPrint("Looping through all files/folders in |$dir|\n");
 
@@ -428,7 +654,7 @@ sub parseDirs {
 		# Make sure it isn't part of ignored list
 		# If it is, set to "", won't pass dir/file check
 		# [reviewme] - Should we warn users when file is ignored on stdout?
-		foreach my $ignore (@IGNORELIST){
+		foreach my $ignore (@IGNORE){
 			# Check for any *.type in ignore list (list .swp)
 			# Regex to see if extension is .type, ignore if so 
 			if ( substr($ignore, 0, 1) eq "*" ){
@@ -458,7 +684,7 @@ sub parseDirs {
 		}
 
 		# Add directory to ignore list so it isn't repeated again
-		push(@IGNORELIST, $path);
+		push(@IGNORE, $path);
 		
 	}
 
@@ -553,7 +779,7 @@ sub parseFile {
 
 
 ###########################################################
-# File Parser
+# Comment setter
 ###########################################################
 
 # Determine comment type from file extension
@@ -574,6 +800,7 @@ sub getComment {
 		# Not using switch/case for compatibility...
 		
 		# C / C++
+		# [todo] - add /* style comment
 		if ( $ext eq ".cpp" || $ext eq ".cc" ||  $ext eq ".c" || $ext eq ".h"){
 			debugPrint("Comment type is: //\n");
 			return "//";
@@ -583,7 +810,6 @@ sub getComment {
 			debugPrint("Comment type is: #\n");
 			return "#";
 		}
-
 		# Can't recognize extension, keep looping
 		else {
 			$file =~ s/(\.(\w+))$//;
@@ -597,7 +823,7 @@ sub getComment {
 
 
 ###########################################################
-# Print results  
+# Result Printer Wrapper
 ###########################################################
 
 # Format the parsed file data and output it nicely
@@ -617,13 +843,12 @@ sub createReport {
 
 
 ###########################################################
-# Result Printer
+# Individual Result Printer
 ###########################################################
 
 # Print results from parsing all pretty and stuff
 sub printResults {
 	my ($entry) = @_;
-
 	# Go through and print info for all files first
 	for (my $i = 0; $i < scalar( @{$entry->{files}}); $i++){
 
@@ -652,7 +877,6 @@ sub printResults {
 			wprint(UNDERLINE BOLD GREEN "$entry->{files}[$i]->{filename}", RESET);
 		}
 
-		#print UNDERLINE BOLD BLUE "$entry->{files}[$i]->{filename}", RESET;
 		wprint("\n");
 		
 		# If there are no issues, don't print anything (go to next file)
@@ -685,4 +909,3 @@ sub printResults {
 	}
 	return 1;
 }
-
