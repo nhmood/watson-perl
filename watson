@@ -49,6 +49,8 @@ my @FILES;
 my @TAGS;
 my @IGNORE;
 my @STRUCTURE;
+my $MAX_DEPTH = 0;
+my $DEPTH = 0;
 my $IGNORE_RC_DIRS = 0;
 my $IGNORE_RC_FILES = 0;
 my $IGNORE_RC_TAGS = 0;
@@ -110,6 +112,7 @@ sub printHelp {
 	print "   -f, --files			list of files to search in\n";
 	print "   -h, --help			print help\n";
 	print "   -i, --ignore			list of files, directories, or filetypes (*.type) to ignore\n";
+	print "   -m, --max-depth		specify max depth for recursive directory parsing\n";
 	print "   -t, --tags			list of tags to search for\n";
 	print "   -v, --version		print watson version and info\n";
 	print "\n";
@@ -338,6 +341,27 @@ sub parseCommandLine {
 				exit 0;
 			}
 	
+			if ($ARGV[$i] eq "-m" || $ARGV[$i] eq "--max-depth"){
+				debugPrint("Max Depth flag passed\n");
+				# Check to make sure next param is a valid number (non-negative)
+				if ( $ARGV[$i + 1] =~ m/^([0-9]+)$/ ){
+					$MAX_DEPTH = $ARGV[$i + 1];
+					debugPrint("Valid max depth: $MAX_DEPTH\n");
+				}
+				else {
+					wprint(BOLD "[ ", RESET);
+					wprint(BOLD MAGENTA "! ", RESET);
+					wprint(BOLD "] ", RESET);
+					wprint("--> ", RESET);
+					wprint("Invalid max depth passed\n");
+				}
+				
+				# Move index to two after (flag and value)
+				$i = $i + 2;
+
+			}
+
+
 			if ($ARGV[$i] eq "-d" || $ARGV[$i] eq "--dirs"){
 				debugPrint("Dir flag passed\n");
 				# Keep track of number of args for when we exit loop
@@ -350,6 +374,7 @@ sub parseCommandLine {
 						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
 						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
 						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
 						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
 		
 						debugPrint("Dir Index: $j: $ARGV[$j]\n");
@@ -391,6 +416,7 @@ sub parseCommandLine {
 						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
 						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
 						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
 						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
 			
 						debugPrint("File Index: $j: $ARGV[$j]\n");
@@ -429,6 +455,7 @@ sub parseCommandLine {
 						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
 						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
 						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
 						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
 					
 						debugPrint("Tag Index: $j: $ARGV[$j]\n");
@@ -465,6 +492,7 @@ sub parseCommandLine {
 						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
 						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
 						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
+						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
 						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
 					
 						debugPrint("Ignore Index: $j: $ARGV[$j]\n");
@@ -606,6 +634,7 @@ sub startScan{
 	# This will always be valid, not condition like files above
 	foreach my $dir (@DIRS){
 		push(@STRUCTURE, parseDirs($dir));
+		$DEPTH = 0;
 	}
 
 	wprint("\n");
@@ -624,6 +653,8 @@ sub parseDirs {
 
 	my @pdirs;		# subdirectories found
 	my @pfiles;		# files found
+
+	
 
 	# Error check for input
 	if (!checkDir($dir)){
@@ -664,7 +695,7 @@ sub parseDirs {
 					$path = "";
 				}
 			}
-			elsif ("$entry" eq "$ignore"){
+			elsif ("$entry" eq "$ignore" | "$path" eq "$ignore"){
 				debugPrint("|$path| is on the ignore list, setting to nothing\n");
 				$path = "";
 				last;
@@ -680,7 +711,21 @@ sub parseDirs {
 		# Check if entry is dir, if so parse
 		elsif (-d "$path"){
 			debugPrint("|$path| is a dir!\n");
-			push(@pdirs, parseDirs("$path"));
+
+			$DEPTH++;
+			debugPrint("Folder depth: $DEPTH\n");
+			if ($MAX_DEPTH == 0){
+				debugPrint("No max depth, parsing folders\n");
+				push(@pdirs, parseDirs("$path"));
+			}
+			elsif ($DEPTH < $MAX_DEPTH){
+				debugPrint("Depth less than Max depth, parsing folder\n");
+				push(@pdirs, parseDirs("$path"));
+			}
+			else {
+				debugPrint("Depth greater than Max depth, ignoring\n");
+			}
+
 		}
 
 		# Add directory to ignore list so it isn't repeated again
