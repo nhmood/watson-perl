@@ -324,6 +324,15 @@ EOF
 sub parseCommandLine {
 	debugPrint("[Checking CL args]\n");
 	debugPrint("Total args: ", $#ARGV + 1, "\n");
+
+	my @opts = ("-d", "--dirs", 
+				"-f", "--files",
+				"-h", "--help", 
+				"-t", "--tags",
+				"-m", "--max-depth",
+				"-i", "--ignore"); 
+
+
 	# Check number of command lines, skip if invalid
 	if ($#ARGV > -1){
 		for (my $i = 0; $i < $#ARGV + 1; $i++){
@@ -370,12 +379,7 @@ sub parseCommandLine {
 				# Keep checking following options until another flag or end
 				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
 					# [fixme] - better way to check if its not a flag?
-					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
-						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
-						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
-						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
-						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
-						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					if (!grep /$ARGV[$j]/, @opts){ 
 		
 						debugPrint("Dir Index: $j: $ARGV[$j]\n");
 						$count++;	
@@ -412,12 +416,7 @@ sub parseCommandLine {
 				# Keep checking following options until another flag or end
 				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
 					# [fixme] - better way to check if its not a flag?
-					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
-						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
-						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
-						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
-						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
-						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					if (!grep /$ARGV[$j]/, @opts){ 
 			
 						debugPrint("File Index: $j: $ARGV[$j]\n");
 						$count++;	
@@ -451,12 +450,7 @@ sub parseCommandLine {
 				# Keep checking following options until another flag or end
 				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
 					# [fixme] - better way to check if its not a flag?
-					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
-						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
-						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
-						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
-						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
-						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					if (!grep /$ARGV[$j]/, @opts){ 
 					
 						debugPrint("Tag Index: $j: $ARGV[$j]\n");
 						$count++;	
@@ -488,12 +482,7 @@ sub parseCommandLine {
 				# Keep checking following options until another flag or end
 				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
 					# [fixme] - better way to check if its not a flag?
-					if ($ARGV[$j] ne "-h" && $ARGV[$j] ne "--help" &&
-						$ARGV[$j] ne "-d" && $ARGV[$j] ne "--dirs" && 
-						$ARGV[$j] ne "-f" && $ARGV[$j] ne "--files" && 
-						$ARGV[$j] ne "-t" && $ARGV[$j] ne "--tags" &&
-						$ARGV[$j] ne "-m" && $ARGV[$j] ne "--max-depth" &&
-						$ARGV[$j] ne "-i" && $ARGV[$j] ne "--ignore"){ 
+					if (!grep /$ARGV[$j]/, @opts){ 
 					
 						debugPrint("Ignore Index: $j: $ARGV[$j]\n");
 						$count++;	
@@ -634,6 +623,7 @@ sub startScan{
 	# This will always be valid, not condition like files above
 	foreach my $dir (@DIRS){
 		push(@STRUCTURE, parseDirs($dir));
+		# Reset DEPTH on directories specified (not dirs found within)
 		$DEPTH = 0;
 	}
 
@@ -712,6 +702,9 @@ sub parseDirs {
 		elsif (-d "$path"){
 			debugPrint("|$path| is a dir!\n");
 
+			# If MAX_DEPTH is 0, no limit on subdirs
+			# Increment DEPTH, compare with MAX_DEPTH
+			# If less than depth, parse dir, else ignore
 			$DEPTH++;
 			debugPrint("Folder depth: $DEPTH\n");
 			if ($MAX_DEPTH == 0){
