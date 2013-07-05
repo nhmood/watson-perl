@@ -27,6 +27,7 @@
 # [todo] - store base html page on github, do a curl for header
 # 		   append actual content to file
 # 		   curl footer from github, boom html
+# [todo] - add support for running outside of project directory (fix stripping of leading . / )
 
 ###########################################################
 # Global parameters 
@@ -56,7 +57,7 @@ my @FILES;
 my @TAGS;
 my @IGNORE;
 my @STRUCTURE;
-my $REMOTEISSUE;
+my $REMOTEISSUE = 0;
 my $GITHUB_API;
 my $GITHUB_REPO;
 my $BITBUCKET_API;
@@ -361,6 +362,7 @@ todo
 # Ignores
 [ignore]
 .git
+
 EOF
 
 	debugPrint($rcdefault);
@@ -689,21 +691,25 @@ sub parseConfig {
 				# No need for regex on API key
 				debugPrint("Github API: $line\n");
 				$GITHUB_API = $line;
+				$REMOTEISSUE = 1;
 			}
 			elsif ($section eq "bitbucket"){
 				# No need for regex on API key
 				debugPrint("Bitbucket API: $line\n");
-				$BITBUCKET_API = $line;		
+				$BITBUCKET_API = $line;
+				$REMOTEISSUE = 1;
 			}
 			elsif ($section eq "githubrepo"){
 				# No need for regex on repo
 				debugPrint("Github Repo: $line\n");
 				$GITHUB_REPO = $line;
+				$REMOTEISSUE = 1;
 			}
 			elsif ($sectiono eq "bitbucketrepo"){
 				# No need for regex on repo
 				debugPrint("Bitbucket Repo: $line\n");
 				$BITBUCKET_REPO = $line;
+				$REMOTEISSUE = 1;
 			}
 
 	    } 
@@ -1090,7 +1096,7 @@ sub gitSetup {
 	print BOLD "[ ", RESET;
 	print BOLD GREEN "+ ", RESET;
 	print BOLD "] ", RESET;
-	print BOLD "Obtaining OAuth Token for $gitstr...\n";
+	print BOLD "Obtaining OAuth Token for $gitstr...\n", RESET;
 
 	# Parse config to make sure no previous API exists
 	checkConfig() ? parseConfig() : true;
@@ -1210,8 +1216,6 @@ sub gitSetup {
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
 		cExit(1);
 	}
-	
-
 
 	# Try to get issue list from specified repo
 	if ($git == BITBUCKET){
@@ -1241,6 +1245,53 @@ sub gitSetup {
 		print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
 	}
+	print "\n";
+
+
+	# [fixme] - Make modular status printer?
+	print BOLD "[ ", RESET;
+	print BOLD GREEN "+ ", RESET;
+	print BOLD "] ", RESET;
+	print BOLD "Creating label for watson on $gitstr...\n", RESET;
+
+	# Create label for watson
+	if ($git == BITBUCKET){
+		# [todo] - Bitbucket API Implementation
+	}
+	elsif ($git == GITHUB){
+		my $call = "curl -s -i " .
+			       "-H 'Authorization: token $GITHUB_API' " .
+			       "https://api.github.com/repos/$user/$repo/labels " .
+			       "-d '{" .
+			       		"\"name\" : \"watson\"," .
+			       		"\"color\" : \"00AEEF\" }'";
+		my $response = `$call`;
+		$js = parseJSON($response);
+	}
+
+
+	if ($js->{"Status"} =~ m/201 Created/){
+		print BOLD "[ ", RESET;
+		print BOLD GREEN "o ", RESET;
+		print BOLD "] ", RESET;
+		print BOLD "Label successfully created\n";
+	}
+	elsif ($js->{"code"} =~ m/already_exists/){
+		print BOLD "[ ", RESET;
+		print BOLD YELLOW "! ", RESET;
+		print BOLD "] ", RESET;
+		print BOLD "Label already exists\n";
+	}
+	else {
+		print BOLD "[ ", RESET;
+		print BOLD RED "x ", RESET;
+		print BOLD "] ", RESET;
+		print BOLD "Unable to access /repo/$user/$repo\n", RESET;
+		print "      Status: ", $js->{"Status"}, "\n";
+		cExit(1);
+	}
+	print "\n";
+
 
 
 	# Check if RC exists
@@ -1351,3 +1402,4 @@ sub parseJSON {
 	}
 	return $js;
 }
+
