@@ -28,6 +28,7 @@
 # 		   append actual content to file
 # 		   curl footer from github, boom html
 # [todo] - add support for running outside of project directory (fix stripping of leading . / )
+# [todo] - wrap printed lines around 80 characters
 
 ###########################################################
 # Global parameters 
@@ -46,6 +47,9 @@ $SIG{'INT'} = \&cExit;
 # For debugging (print data structures)
 use Data::Dumper;
 
+# For MD5 Sum (issue posting check)
+use Digest::MD5 qw(md5_hex);
+
 # App Config
 my $DEBUG = 0;
 my $RCNAME = ".watsonrc";		# Change config file name
@@ -60,8 +64,10 @@ my @STRUCTURE;
 my $REMOTEISSUE = 0;
 my $GITHUB_API;
 my $GITHUB_REPO;
+my $GITHUB_ISSUES;
 my $BITBUCKET_API;
 my $BITBUCKET_REPO;
+my $BITBUCKET_ISSUES;
 my $MAX_DEPTH = 0;
 my $DEPTH = 0;
 my $IGNORE_RC_DIRS = 0;
@@ -455,8 +461,8 @@ sub parseCommandLine {
 					cExit(1);
 				}
 
-				if 	  ($ARGV[$i + 1] eq "bitbucket"){ gitSetup(BITBUCKET); }
-			   	elsif ($ARGV[$i + 1] eq "github"   ){ gitSetup(GITHUB); }
+				if 	  ($ARGV[$i + 1] eq "bitbucket"){ remoteSetup(BITBUCKET); }
+			   	elsif ($ARGV[$i + 1] eq "github"   ){ remoteSetup(GITHUB); }
 				else  {
 						print BOLD "[ ", RESET;
 						print BOLD RED "x ", RESET;
@@ -690,26 +696,30 @@ sub parseConfig {
 			elsif ($section eq "github"){
 				# No need for regex on API key
 				debugPrint("Github API: $line\n");
+				chomp($line);
 				$GITHUB_API = $line;
-				$REMOTEISSUE = 1;
 			}
 			elsif ($section eq "bitbucket"){
 				# No need for regex on API key
 				debugPrint("Bitbucket API: $line\n");
+				chomp($line);
 				$BITBUCKET_API = $line;
-				$REMOTEISSUE = 1;
 			}
 			elsif ($section eq "githubrepo"){
 				# No need for regex on repo
 				debugPrint("Github Repo: $line\n");
+				chomp($line);
 				$GITHUB_REPO = $line;
-				$REMOTEISSUE = 1;
+				# Get list of issues, also checks if API key is valid
+				getIssues();
 			}
 			elsif ($sectiono eq "bitbucketrepo"){
 				# No need for regex on repo
 				debugPrint("Bitbucket Repo: $line\n");
+				chomp($line);
 				$BITBUCKET_REPO = $line;
-				$REMOTEISSUE = 1;
+				# Get list of issues, also checks if API key is valid
+				getIssues();
 			}
 
 	    } 
@@ -920,7 +930,21 @@ sub parseFile {
 					my $issue = {};
 					$issue->{linenumber} = $linecount;
 					$issue->{comment} = $fissue;
+
+					# Create hash for specific issue
+					my $digest = md5_hex($issue->{tag}, $issue->{file}, $issue->{comment});
+					debugPrint("$digest\n");
+					$issue->{md5} = $digest;
+
 					push(@{$tag}, $issue);
+
+					# If valid API key is set, append file and tag, pass $issue to poster function
+					if ($REMOTEISSUE){
+						$issue->{file} = $file;
+						$issue->{tag} = $tag;
+						postIssue($issue);
+					}
+
 		    	}
 			}
 	    }
@@ -1058,9 +1082,25 @@ sub printResults {
 			wprint(BOLD BLUE "$tag", RESET);
 			wprint(BOLD  " \]\n", RESET);
 
+			
+
 			for (my $j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
 				wprint(WHITE "  line $entry->{files}[$i]->{$tag}[$j]->{linenumber} - ", RESET);
-				wprint(BOLD "$entry->{files}[$i]->{$tag}[$j]->{comment} \n", RESET); 
+				wprint(BOLD "$entry->{files}[$i]->{$tag}[$j]->{comment} ", RESET);
+
+				# If valid API key
+				# Check if issue has been closed on Github or Bitbucket, set to resolved
+				if ( ($REMOTEISSUE) ){ 
+					if ( ($GITHUB_CLOSED_ISSUES =~ m/$entry->{files}[$i]->{$tag}[$j]->{md5}/) ) {
+						wprint(BOLD "\[", RESET);
+						wprint(BOLD GREEN "Resolved on Github", RESET);
+						wprint(BOLD "\]");
+					}
+					elsif (0) {
+						# Bitbucket Implementation
+					}
+				}
+				wprint("\n");
 			}
 			wprint("\n");
 		}
@@ -1074,13 +1114,50 @@ sub printResults {
 
 
 ###########################################################
+# JSON Parser
+###########################################################
+
+# Parse JSON response from github/bitbucket issue requests
+sub parseJSON {
+	my ($json) = @_;
+
+	debugPrint("JSON Parser");
+
+	# Clean up text, separate with : delimiter
+	# Throw data into hash
+	my $js = {};
+	my @lines = split /\n/, $json;
+	foreach my $line (@lines){
+		my $ind = index($line, ":");
+		if ($ind != -1){
+			my $field = substr($line, 0, $ind);
+			my $value = substr($line, $ind + 1);
+			if ($value ne "{" || $value ne "["){
+				# Remove trailing spaces, }, ], ,s and all ""
+				$field =~ s/^(\s+)}?]?//g;
+				$field =~ s/\"?,?//g;
+
+				$value =~ s/^(\s+)\{?\[?//g;
+				$value =~ s/\"?,?//g;
+
+				debugPrint("field: $field\n");
+				debugPrint("value: $value\n");
+				$js->{$field} = $value;
+			}
+		}
+	}
+	return $js;
+}
+
+
+###########################################################
 # Git Setup
 ###########################################################
 
 # Obtain API key for either Github or Bitbucket
-sub gitSetup {
-	my ($git) = @_;
-	my $gitstr = $git ? "Bitbucket" : "Github";
+sub remoteSetup {
+	my ($remote) = @_;
+	my $remotestr = $remote ? "Bitbucket" : "Github";
 
 	# JSON Response var
 	my $js;
@@ -1096,17 +1173,17 @@ sub gitSetup {
 	print BOLD "[ ", RESET;
 	print BOLD GREEN "+ ", RESET;
 	print BOLD "] ", RESET;
-	print BOLD "Obtaining OAuth Token for $gitstr...\n", RESET;
+	print BOLD "Obtaining OAuth Token for $remotestr...\n", RESET;
 
 	# Parse config to make sure no previous API exists
 	checkConfig() ? parseConfig() : true;
 
-	if (($git ? $BITBUCKET_API  : $GITHUB_API) ne "" ||
-		($git ? $BITBUCKET_REPO : $GITHUB_REPO) ne ""){
+	if (($remote ? $BITBUCKET_API  : $GITHUB_API) ne "" ||
+		($remote ? $BITBUCKET_REPO : $GITHUB_REPO) ne ""){
 		print BOLD "[ ", RESET;
 		print BOLD RED "! ", RESET;
 		print BOLD "] ", RESET;
-		print BOLD "Previous $gitstr API + repo is in RC, are you sure you want to overwrite?\n", RESET;
+		print BOLD "Previous $remotestr API + repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
 		my $overwrite = <STDIN>;
@@ -1118,7 +1195,7 @@ sub gitSetup {
 			print BOLD "[ ", RESET;
 			print BOLD RED "x ", RESET;
 			print BOLD "] ", RESET;
-			print BOLD "Not overwriting current $gitstr API + repo info\n", RESET;
+			print BOLD "Not overwriting current $remotestr API + repo info\n", RESET;
 			cExit(1);
 		}
 	}
@@ -1127,7 +1204,7 @@ sub gitSetup {
 	print BOLD "[ ", RESET;
 	print BOLD YELLOW "! ", RESET;
 	print BOLD "] ", RESET;
-	print BOLD "Access to your $gitstr account required to make/update issues\n", RESET;
+	print BOLD "Access to your $remotestr account required to make/update issues\n", RESET;
    	
 	print "      See help or README for more details on Github/Bitbucket access\n";	
 	print "      (Or just take a peek at line ~1095)\n\n";
@@ -1148,7 +1225,7 @@ sub gitSetup {
 
 	# cURL to get OAuth Token, returns JSON
 	print BOLD;
-	if ($git == BITBUCKET){
+	if ($remote == BITBUCKET){
 		# [todo] - Bitbucket API Implementation
 	}
 	else {
@@ -1179,7 +1256,7 @@ sub gitSetup {
 
 	# Set API key for use later so we don't have to parse config
 	# [reviewme] - Maybe we should just parse config?
-	if ($git == BITBUCKET){
+	if ($remote == BITBUCKET){
 		$BITBUCKET_API = $js->{"token"};
 	}
 	else {
@@ -1252,13 +1329,13 @@ sub gitSetup {
 	print BOLD "[ ", RESET;
 	print BOLD GREEN "+ ", RESET;
 	print BOLD "] ", RESET;
-	print BOLD "Creating label for watson on $gitstr...\n", RESET;
+	print BOLD "Creating label for watson on $remotestr...\n", RESET;
 
 	# Create label for watson
-	if ($git == BITBUCKET){
+	if ($remote == BITBUCKET){
 		# [todo] - Bitbucket API Implementation
 	}
-	elsif ($git == GITHUB){
+	elsif ($remote == GITHUB){
 		my $call = "curl -s -i " .
 			       "-H 'Authorization: token $GITHUB_API' " .
 			       "https://api.github.com/repos/$user/$repo/labels " .
@@ -1321,9 +1398,9 @@ sub gitSetup {
 				}
 			}
 			# If not in bitbucket or github section, safe to copy
-			# make $gitstr lowercase and check that + repo 
-			elsif ($section ne (lc($gitstr)) &&
-				   $section ne (lc($gitstr . "repo"))){
+			# make $remotestr lowercase and check that + repo 
+			elsif ($section ne (lc($remotestr)) &&
+				   $section ne (lc($remotestr . "repo"))){
 				
 				debugPrint("Not in git section, copying to new rc\n");
 				print $out $line;
@@ -1345,10 +1422,10 @@ sub gitSetup {
 
 	# Append API token to end of file (old or new, doesn't matter now)
 	open(my $file, "+>>", "$RCNAME");
-	print $file "[", ($git ? "bitbucket" : "github"), "]\n";
-	print $file ($git ? $BITBUCKET_API : $GITHUB_API);
+	print $file "[", ($remote ? "bitbucket" : "github"), "]\n";
+	print $file ($remote ? $BITBUCKET_API : $GITHUB_API);
 	print $file "\n\n\n";
-	print $file "[", ($git ? "bitbucketrepo" : "githubrepo"), "]\n";
+	print $file "[", ($remote ? "bitbucketrepo" : "githubrepo"), "]\n";
 	print $file "$user/$repo";
 	print $file "\n";
 	close($file);
@@ -1358,9 +1435,9 @@ sub gitSetup {
 	print BOLD "[ ", RESET;
 	print BOLD GREEN "o ", RESET;
 	print BOLD "] ", RESET;
-	print BOLD "$gitstr successfully setup\n", RESET;
-	print "      Issues will now automatically be updated on $gitstr by default\n";
-	print "      Use -l, --local to not update against $gitstr\n";
+	print BOLD "$remotestr successfully setup\n", RESET;
+	print "      Issues will now automatically be updated on $remotestr by default\n";
+	print "      Use -l, --local to not update against $remotestr\n";
 	print "      See help or README for more details on Github/Bitbucket access\n";	
 	print "\n";
 	cExit(0);
@@ -1368,38 +1445,102 @@ sub gitSetup {
 
 
 ###########################################################
-# JSON Parser
+# Remote Issue Getter
 ###########################################################
 
-# Parse JSON response from github/bitbucket issue requests
-sub parseJSON {
-	my ($json) = @_;
+# Post issues to github/bitbucket 
+sub getIssues {
+	# Only attempt if API is specified
+	if (length($GITHUB_API) != 0){
+		debugPrint("Getting Github Issues\n");
+		# Get open tickets
+		my $call = "curl -s -i " .
+				   "-H 'Authorization: token $GITHUB_API' " .
+				   "https://api.github.com/repos/$GITHUB_REPO/issues?labels\\=watson\\&state\\=open";
+		$GITHUB_OPEN_ISSUES = `$call`;
+		debugPrint($GITHUB_OPEN_ISSUES);
 
-	debugPrint("JSON Parser");
-
-	# Clean up text, separate with : delimiter
-	# Throw data into hash
-	my $js = {};
-	my @lines = split /\n/, $json;
-	foreach my $line (@lines){
-		my $ind = index($line, ":");
-		if ($ind != -1){
-			my $field = substr($line, 0, $ind);
-			my $value = substr($line, $ind + 1);
-			if ($value ne "{" || $value ne "["){
-				# Remove trailing spaces, }, ], ,s and all ""
-				$field =~ s/^(\s+)}?]?//g;
-				$field =~ s/\"?,?//g;
-
-				$value =~ s/^(\s+)\{?\[?//g;
-				$value =~ s/\"?,?//g;
-
-				debugPrint("field: $field\n");
-				debugPrint("value: $value\n");
-				$js->{$field} = $value;
-			}
+		# Check or a Status 200 OK, if not, API key might be invalid, warn user
+		# Set REMOTEISSUE to 0 so that no remote related calls will be made
+		if ($GITHUB_OPEN_ISSUES !~ m/200 OK/){
+			$REMOTEISSUE = 0;
+			wprint(BOLD "[ ", RESET);
+			wprint(BOLD RED "x ", RESET);
+			wprint(BOLD "] ", RESET);
+			wprint("--> ", RESET);
+			wprint(BOLD "Unable to access remote, Github API may be invalid\n");
+			wprint(BOLD "          Consider running --remote (-r) option to regenerate key\n\n", RESET);
+		}
+		# Else get the closed tickets also and set REMOTEISSUE to 1
+		else {
+			$REMOTEISSUE = 1;
+			$call = "curl -s -i " .
+					"-H 'Authorization: token $GITHUB_API' " .
+					"https://api.github.com/repos/$GITHUB_REPO/issues?labels\\=watson\\&state\\=closed"; 
+			$GITHUB_CLOSED_ISSUES = `$call`;
+			debugPrint($GITHUB_CLOSED_ISSUES);
 		}
 	}
-	return $js;
+	else {
+		debugPrint("No Github API, ignoring issue list\n");
+	}
+
+	if (length($BITBUCKET_API) != 0){
+			debugPrint("Getting Bitbucket Issues\n");
+	}
+	else {
+		debugPrint("No Bitbucket API, ignoring issue list\n");
+	}
 }
 
+
+###########################################################
+# Remote Issue Poster
+###########################################################
+
+# Post issues to github/bitbucket 
+sub postIssue {
+	my ($issue) = @_;
+	# Github API has been registered, post on Github
+	if (length($GITHUB_API) != 0){
+		
+		# Check if md5 of issue has already been posted
+		# [fixme] - if issue with same name in same file is made, won't ever get posted again :-/
+		if ($GITHUB_OPEN_ISSUES !~ m/$issue->{md5}/ && $GITHUB_CLOSED_ISSUES !~ m/$issue->{md5}/){
+			# Format title and body for creating issue
+			# Title format: comment [basename of file], escape any '
+			my $title = $issue->{file};
+			$title =~ s/^(.+)\///;
+			$title = "$issue->{comment} [" . $title . "]";
+			# [fixme] - Figure out how to escape ' character on JSON post
+			$title =~ s/\'//;
+
+			
+			debugPrint("Formatted title for Github Post : $title\n");
+
+			# Format comment to escape any ' so JSON will be formatted properly
+
+			my $body = "__filename__ : $issue->{file}\\n" .
+					   "__line #__ : $issue->{linenumber}\\n" .
+					   "__tag__ : $issue->{tag}\\n" .
+					   "__md5__ : $issue->{md5}\\n";
+			debugPrint("Formatted body for Github Post : $body\n");
+
+			my $call = "curl -s -i " .
+					   "-H 'Authorization: token $GITHUB_API' " .
+					   "https://api.github.com/repos/$GITHUB_REPO/issues " .
+					   "-d '{\"title\" : \"$title\", " .
+					   "\"body\" : \"$body\", " .
+					   "\"labels\" : [ \"watson\", \"$issue->{tag}\"]}'";
+			debugPrint("Formatted call for GitHub Post : $call\n");
+			my $response = `$call`;
+			debugPrint($response);
+		}
+	}
+
+	if (length($BITBUCKET_API) != 0){
+		# Bitbucket Implementation
+	}
+
+
+}
