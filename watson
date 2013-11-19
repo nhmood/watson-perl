@@ -6,42 +6,26 @@
 # See the file LICENSE for copying permission
 
 
-# [todo] - command line arg for tags, ignore, createrc, other options
-# [todo] - command line for file/folder (allow individual)
 # [todo] - add priority listing for tags and todo
 # [todo] - generate .html file with report
 # [todo] - add text editor/jump to code for each item in .html report
 # [todo] - if x is placed in todo [!] then move it to separate file
-# [todo] - have option to export tags/todo to github/bitbucket issue tracker
-# [todo] - add function and ask user to send phonehome to keep track of stats
-# [todo] - changelist such that if a tag is replaced with its matching fixed
-#		   remove issue (resolve) on github/bitbucket, put it into list of fixed
-#		   issues, and modify source to remove tag (optional) 
 # [todo] - store in separate file or parse every time? (thinking parse)
 # [todo] - tell when directory changes with some header
-# [todo] - support other comment types
 # [todo] - change @IGNOREDIR to hash instead of array for efficiency
 # [todo] - only allow user to check executing users files (setuid exploit)
-# [todo] - allow single files in rc file (use different [files] section?)
-# [todo] - add check for color support, modify print that way
-# [todo] - store base html page on github, do a curl for header
-# 		   append actual content to file
-# 		   curl footer from github, boom html
-# [todo] - add support for running outside of project directory (fix stripping of leading . / )
 # [todo] - wrap printed lines around 80 characters
 # [todo] - command line option to remove remote repos
 # [todo] - replace json parser with just grep? need to get status if failed
 # [todo] - add ability to update issue if same title but different md5
 # [todo] - implement local only reporting (make it default?)
 # [todo] - progress bar for obtaining github/bitbucket issue list
-# [todo] - update readme on all functionality
 # [todo] - local should be default, must use -r or remote flag to post and check?
 #		 - maybe have it check against background unless -local is passed
 #		 - but dont post unless --post is used (make it faster?)
 # [todo] - add status indicator for remote requests
 #		 - we know # of requests and which we are on, can do it that way
 # [todo] - change github issue checks to -d instead of issue?key=val
-# [todo] - print remote status option
 # [todo] - add remote / local options and necessary logic
 # [todo] - replace open/closed issue var with just all and closed?
 
