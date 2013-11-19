@@ -2,6 +2,7 @@
 # watson - inline issue manager
 # nhmood @ [goosecode labs] | 2012
 # Copyright (c) 2012-2013 goosecode labs
+# This content is licensed under the MIT License
 # See the file LICENSE for copying permission
 
 
@@ -134,7 +135,11 @@ sub printHeader {
 	wprint(BOLD "------------------------------\n");
 	wprint(BOLD "watson", RESET);
 	wprint(" - ");
-	wprint(BOLD YELLOW "inline issue manager\n", RESET);
+	wprint(BOLD YELLOW "inline issue manager\n\n", RESET);
+	$pwd = `pwd`;
+	wprint("Run in: $pwd");
+	$time = localtime;
+	wprint("Run @ $time\n");
 	wprint(BOLD "------------------------------\n\n");
 	return 1;
 }
@@ -156,9 +161,10 @@ sub printHelp {
 	print "   -f, --files			list of files to search in\n";
 	print "   -h, --help			print help\n";
 	print "   -i, --ignore			list of files, directories, or types to ignore\n";
-	print "   -m, --max-depth		max depth for recursive directory parsing\n";
-	print "   -r, --remote			list / create tokens for bitbucket/github\n";
+	print "   -p, --parse-depth		depth to recursively parse directories\n";
+	print "   -r, --remote			list / create tokens for Bitbucket/Github\n";
 	print "   -t, --tags			list of tags to search for\n";
+	#print "   -u, --update          update remote repos with current issues\n";
 	print "   -v, --version		print watson version and info\n";
 	print "\n";
 
@@ -182,7 +188,7 @@ sub printHelp {
 # Print watson help 
 sub printVersion {
 
-	print "watson v1.2\n";
+	print "watson v1.3\n";
 	print "Copyright (c) 2012-2013 goosecode labs\n";
 	print "Licensed under MIT, see LICENSE for details\n";
 	print "\n";
@@ -380,8 +386,8 @@ my $rcdefault = <<EOF;
  
 # Tags 
 [tags] 
-fixme 
-reviewme
+fix
+review
 todo
 
 
@@ -413,9 +419,10 @@ sub parseCommandLine {
 				"-f", "--files",
 				"-h", "--help", 
 				"-t", "--tags",
-				"-m", "--max-depth",
+				"-p", "--parse-depth",
 				"-i", "--ignore",
-				"-r", "--remote"); 
+				"-r", "--remote",
+				"-u", "--update"); 
 
 
 	# Check number of command lines, skip if invalid
@@ -435,19 +442,19 @@ sub parseCommandLine {
 				cExit(0);
 			}
 	
-			if ($ARGV[$i] eq "-m" || $ARGV[$i] eq "--max-depth"){
-				debugPrint("Max Depth flag passed\n");
+			if ($ARGV[$i] eq "-p" || $ARGV[$i] eq "--parse-depth"){
+				debugPrint("Parse Depth flag passed\n");
 				# Check to make sure next param is a valid number (non-negative)
 				if ( $ARGV[$i + 1] =~ m/^([0-9]+)$/ ){
 					$MAX_DEPTH = $ARGV[$i + 1];
-					debugPrint("Valid max depth: $MAX_DEPTH\n");
+					debugPrint("Valid parse depth: $MAX_DEPTH\n");
 				}
 				else {
 					wprint(BOLD "[ ", RESET);
 					wprint(BOLD MAGENTA "! ", RESET);
 					wprint(BOLD "] ", RESET);
 					wprint("--> ", RESET);
-					wprint("Invalid max depth passed\n");
+					wprint("Invalid parse depth passed\n");
 				}
 				
 				# Move index to two after (flag and value)
@@ -465,7 +472,7 @@ sub parseCommandLine {
 					print BOLD "[ ", RESET;
 					print BOLD RED "x ", RESET;
 					print BOLD "] ", RESET;
-					print "Please run remote flag alone to generate Github/Bitbucket OAuth token\n";
+					print "Please run remote flag alone to generate GitHub/Bitbucket OAuth token\n";
 					print "      See help for more details\n";
 					cExit(1);
 				}
@@ -689,6 +696,7 @@ sub parseConfig {
 	push(@IGNORE, ".");
 	push(@IGNORE, "..");
 	push(@IGNORE, "*.swp");
+	push(@IGNORE, ".watsonrc");
 	push(@IGNORE, $TMPOUT);
 	
 	
@@ -751,7 +759,7 @@ sub parseConfig {
 			}
 			elsif ($section eq "github"){
 				# No need for regex on API key
-				debugPrint("Github API: $line\n");
+				debugPrint("GitHub API: $line\n");
 				chomp($line);
 				$GITHUB_API = $line;
 			}
@@ -763,7 +771,7 @@ sub parseConfig {
 			}
 			elsif ($section eq "githubrepo"){
 				# No need for regex on repo
-				debugPrint("Github Repo: $line\n");
+				debugPrint("GitHub Repo: $line\n");
 				chomp($line);
 				$GITHUB_REPO = $line;
 
@@ -960,11 +968,11 @@ sub parseFile {
 	# Get filetype and set corresponding comment type
 	my $comment = getComment($file);
 	if (!$comment){
-		wprint(BOLD "[ ", RESET);
-		wprint(BOLD MAGENTA "! ", RESET);
-		wprint(BOLD "] ", RESET);
-		wprint("--> ", RESET);
-		wprint("Couldn't determine filetype for $file, using # as comment\n", RESET);
+		print(BOLD "[ ", RESET);
+		print(BOLD MAGENTA "! ", RESET);
+		print(BOLD "] ", RESET);
+		print("--> ", RESET);
+		print("Couldn't determine filetype for $file, using # as comment\n", RESET);
 		$comment = "#";
 	}
 
@@ -1166,7 +1174,7 @@ sub printResults {
 				if ( ($GITHUB_VALID) ){ 
 					if ( ($GITHUB_CLOSED_ISSUES =~ m/$entry->{files}[$i]->{$tag}[$j]->{md5}/) ) {
 						wprint(BOLD "\[", RESET);
-						wprint(BOLD GREEN "Resolved on Github", RESET);
+						wprint(BOLD GREEN "Resolved on GitHub", RESET);
 						wprint(BOLD "\]");
 					}
 				}
@@ -1264,7 +1272,7 @@ sub githubSetup {
 		print BOLD "[ ", RESET;
 		print BOLD RED "! ", RESET;
 		print BOLD "] ", RESET;
-		print BOLD "Previous GitHub API + repo is in RC, are you sure you want to overwrite?\n", RESET;
+		print BOLD "Previous GitHub API + Repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
 		my $overwrite = <STDIN>;
@@ -1287,7 +1295,7 @@ sub githubSetup {
 	print BOLD "] ", RESET;
 	print BOLD "Access to your GitHub account required to make/update issues\n", RESET;
    	
-	print "      See help or README for more details on Github/Bitbucket access\n\n";	
+	print "      See help or README for more details on GitHub/Bitbucket access\n\n";	
 
 	# Get username, clear newlines surrounding text
 	# If blank, give error
@@ -1347,9 +1355,9 @@ sub githubSetup {
 	print BOLD YELLOW "! ", RESET;
 	print BOLD "] ", RESET;
 	print BOLD "Repo information required\n", RESET;
-	print "      Please provide owner that repo is under followed by repo\n";
+	print "      Please provide owner that repo is under followed by repo name\n";
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
-	print "      See help or README for more details on Github access\n\n";	
+	print "      See help or README for more details on GitHub access\n\n";	
 
 	print BOLD "Owner: ", RESET;
 	my $owner = <STDIN>;
@@ -1512,7 +1520,7 @@ sub githubSetup {
 	print BOLD "GitHub successfully setup\n", RESET;
 	print "      Issues will now automatically be updated on GitHub by default\n";
 	#print "      Use -l, --local to not update against GitHub\n";
-	print "      See help or README for more details on Github/Bitbucket access\n";	
+	print "      See help or README for more details on GitHub/Bitbucket access\n";	
 	print "\n";
 	cExit(0);
 }
@@ -1526,7 +1534,7 @@ sub githubSetup {
 sub getGithubIssues {
 	# Only attempt if API is specified
 	if (length($GITHUB_API) != 0){
-		debugPrint("Getting Github Issues\n");
+		debugPrint("Getting GitHub Issues\n");
 		# Get open tickets
 		my $call = "curl -s -i " .
 				   "-H 'Authorization: token $GITHUB_API' " .
@@ -1542,7 +1550,7 @@ sub getGithubIssues {
 			wprint(BOLD RED "x ", RESET);
 			wprint(BOLD "] ", RESET);
 			wprint("--> ", RESET);
-			wprint(BOLD "Unable to access remote, Github API may be invalid\n");
+			wprint(BOLD "Unable to access remote, GitHub API may be invalid\n");
 			wprint(BOLD "          Consider running --remote (-r) option to regenerate key\n\n", RESET);
 		}
 		# Else get the closed tickets also and set GITHUB_VALID to 1
@@ -1556,7 +1564,7 @@ sub getGithubIssues {
 		}
 	}
 	else {
-		debugPrint("No Github API, ignoring issue list\n");
+		debugPrint("No GitHub API, ignoring issue list\n");
 	}
 
 }
@@ -1584,14 +1592,14 @@ sub postGithub {
 			$title =~ s/\'//;
 
 			
-			debugPrint("Formatted title for Github Post : $title\n");
+			debugPrint("Formatted title for GitHub Post : $title\n");
 
 			# Format comment to escape any ' so JSON will be formatted properly
 			my $body = "__filename__ : $issue->{file}\\n" .
 					   "__line #__ : $issue->{linenumber}\\n" .
 					   "__tag__ : $issue->{tag}\\n" .
 					   "__md5__ : $issue->{md5}\\n";
-			debugPrint("Formatted body for Github Post : $body\n");
+			debugPrint("Formatted body for GitHub Post : $body\n");
 
 			my $call = "curl -s -i " .
 					   "-H 'Authorization: token $GITHUB_API' " .
@@ -1650,7 +1658,7 @@ sub bitbucketSetup {
 		print BOLD "[ ", RESET;
 		print BOLD RED "! ", RESET;
 		print BOLD "] ", RESET;
-		print BOLD "Previous Bitbucket repo is in RC, are you sure you want to overwrite?\n", RESET;
+		print BOLD "Previous Bitbucket Repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
 		my $overwrite = <STDIN>;
@@ -1673,13 +1681,13 @@ sub bitbucketSetup {
 	print BOLD "] ", RESET;
 	print BOLD "Access to your Bitbucket account required to make/update issues\n", RESET;
    	
-	print "      See help or README for more details on Github/Bitbucket access\n";
+	print "      See help or README for more details on GitHub/Bitbucket access\n\n";
 
 	print BOLD "[ ";
 	print BOLD RED "! ", RESET;
 	print BOLD "]", RESET;
 	print BOLD " Bitbucket OAuth not implemented yet.\n", RESET;
-	print "      Basic HTTP Auth in use, will request PW entry.\n\n";
+	print "      Basic HTTP Auth in use, will request PW entry every time.\n\n";
 
 
 	# Get username, clear newlines surrounding text
@@ -1705,9 +1713,9 @@ sub bitbucketSetup {
 	print BOLD YELLOW "! ", RESET;
 	print BOLD "] ", RESET;
 	print BOLD "Repo information required\n", RESET;
-	print "      Please provide owner that repo is under followed by repo (owner)\n";
+	print "      Please provide owner that repo is under followed by repo name\n";
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
-	print "      See help or README for more details on Github access\n\n";	
+	print "      See help or README for more details on GitHub access\n\n";	
 
 	
 	print BOLD "Owner: ", RESET;
@@ -1730,6 +1738,8 @@ sub bitbucketSetup {
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
 		cExit(1);
 	}
+
+	print "\n";
 
 	my $call;
 	my $response;
@@ -1833,7 +1843,7 @@ sub bitbucketSetup {
 	print BOLD "Bitbucket successfully setup\n", RESET;
 	print "      Issues will now automatically be updated on Bitbucket by default\n";
 	print "      Use -l, --local to not update against GitHub\n";
-	print "      See help or README for more details on Github/Bitbucket access\n";	
+	print "      See help or README for more details on GitHub/Bitbucket access\n";	
 	print "\n";
 	cExit(0);
 }
