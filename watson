@@ -34,7 +34,8 @@
 ###########################################################
 
 use strict;
-# use warnings;
+use feature qw/say/;  # implies dependency on perl 5.10
+use warnings;
 
 # For color print outs
 use Term::ANSIColor qw(:constants);
@@ -135,32 +136,30 @@ sub printHeader {
 
 # Print watson help
 sub printHelp {
-	print BOLD;
-	print "Usage: watson [OPTION]...\n";
-	print "Running watson with no arguments will parse with settings in RC file\n";
-	print "If no RC file exists, default RC file will be created\n";
+	print BOLD, <<'END_HELP', RESET;
+Usage: watson [OPTION]...
+Running watson with no arguments will parse with settings in RC file
+If no RC file exists, default RC file will be created
 
-	print "\n";
-	print "   -d, --dirs			list of directories to search in\n";
-	print "   -f, --files			list of files to search in\n";
-	print "   -h, --help			print help\n";
-	print "   -i, --ignore			list of files, directories, or types to ignore\n";
-	print "   -p, --parse-depth		depth to recursively parse directories\n";
-	print "   -r, --remote			list / create tokens for Bitbucket/Github\n";
-	print "   -t, --tags			list of tags to search for\n";
-	#print "   -u, --update          update remote repos with current issues\n";
-	print "   -v, --version		print watson version and info\n";
-	print "\n";
+   -d, --dirs			list of directories to search in
+   -f, --files			list of files to search in
+   -h, --help			say help
+   -i, --ignore			list of files, directories, or types to ignore
+   -p, --parse-depth		depth to recursively parse directories
+   -r, --remote			list / create tokens for Bitbucket/Github
+   -t, --tags			list of tags to search for
+   -v, --version		say watson version and info
 
-	print "Any number of files, tags, dirs, and ignores can be listed after flag\n";
-	print "Ignored files should be space separated\n";
-	print "To use *.filetype identifier, encapsulate in \"\" to avoid shell substitutions \n";
-	print "\n";
+Any number of files, tags, dirs, and ignores can be listed after flag
+Ignored files should be space separated
+To use *.filetype identifier, encapsulate in \"\" to avoid shell substitutions
 
-	print "Report bugs to: watson\@goosecode.com\n";
-	print "watson home page: <http://goosecode.com/projects/watson>\n";
-	print "[goosecode] labs | 2012-2013\n";
-	print RESET;
+
+Report bugs to: watson\@goosecode.com
+watson home page: <http://goosecode.com/projects/watson>
+[goosecode] labs | 2012-2013";
+END_HELP
+
 	return 1;
 }
 
@@ -171,13 +170,14 @@ sub printHelp {
 
 # Print watson help
 sub printVersion {
+	print <<'END_VERSION';
+watson v1.3
+Copyright (c) 2012-2013 goosecode labs
+Licensed under MIT, see LICENSE for details
 
-	print "watson v1.3\n";
-	print "Copyright (c) 2012-2013 goosecode labs\n";
-	print "Licensed under MIT, see LICENSE for details\n";
-	print "\n";
+Written by nhmood, see <http://goosecode.com/projects/watson>
+END_VERSION
 
-	print "Written by nhmood, see <http://goosecode.com/projects/watson>\n";
 	return 1;
 }
 
@@ -188,13 +188,16 @@ sub printVersion {
 
 # Clean exit function that removes temp files
 sub cExit {
-	my ($ex) = @_;
-	# Clean up temp file(s)
-	system("rm $TMPOUT > /dev/null 2>&1");
+	my ($exit_status) = @_;
+
+	unlink $TMPOUT or warn "Could not remove $TMPOUT: $!";
 
 	# If exit status is INT(terupt), set to 1 and print newline
-	if ($ex eq "INT"){ $ex = 1; print "\n"; }
-	exit $ex;
+	if ($exit_status eq "INT"){
+		$exit_status = 1;
+		print "\n";
+	}
+	exit $exit_status;
 }
 
 
@@ -205,10 +208,7 @@ sub cExit {
 # Debug print statements that are only enabled
 # when debug flag is set (top of file)
 sub debugPrint {
-	if ($DEBUG){
-		print @_;
-	}
-	return 1;
+	print @_ if $DEBUG;
 }
 
 
@@ -219,14 +219,12 @@ sub debugPrint {
 # If system has less, dump all output to .tmp file and use less
 # If no less, just print straight to stdout
 sub wprint {
-	my ($line) = @_;
-
 	if ($HASLESS){
-		print $LESSOUT "$line";
+		print $LESSOUT @_;
 		return 1;
 	}
 	else {
-		print "$line";
+		print @_;
 		return 0;
 	}
 }
@@ -239,14 +237,10 @@ sub wprint {
 # Check to see if system has less
 # If so, set flag and open tmp file
 sub checkLess {
-	if (! system("which less > /dev/null 2>&1") ){
-		open($LESSOUT, "+>", $TMPOUT);
-		$HASLESS = 1;
-		return 1;
-	}
-	else {
-		return 0;
-	}
+	return $HASLESS if defined $HASLESS;
+	$HASLESS //= !system("which less > /dev/null 2>&1") or return 0;
+	open $LESSOUT, "+>", $TMPOUT;
+	return 1;
 }
 
 
@@ -257,13 +251,7 @@ sub checkLess {
 # Check to see if system has cURL
 # If so, set flag
 sub checkcURL {
-	if (! system("which curl > /dev/null 2>&1") ){
-		$HASCURL = 1;
-		return 1;
-	}
-	else {
-		return 0;
-	}
+	return $HASCURL //= !system("which curl > /dev/null 2>&1");
 }
 
 
@@ -275,20 +263,21 @@ sub checkcURL {
 # Different from just using -d, checks if able to OPEN
 sub checkDir {
 	my ($dir) = @_;
+
 	# Error check for input
-	if (length($dir) == 0){
+	unless (length $dir) {
 		wprint("No directories specified.\n");
 		return 0;
 	}
-	# Check if directory can be opened
-	my $success = opendir(my $tDIR, $dir);
-	if (!$success){
-		wprint("Cannot open dir: |$dir|, skipping.\n");
-		return 0;
-	}
 
-	closedir($tDIR);
-	debugPrint("|$dir| exists and opened successfully.\n");
+	# Check if directory can be opened
+	opendir my $tDIR, $dir or do {
+		wprint(qq{Cannot open dir "$dir": $!\n});
+		return 0;
+	};
+
+	closedir $tDIR;
+	debugPrint(qq{"$dir" exists and opened successfully.\n});
 	return 1;
 }
 
@@ -301,21 +290,21 @@ sub checkDir {
 # Different from just using -f, checks if able to OPEN
 sub checkFile {
 	my ($file) = @_;
+
 	# Error check for input
-	if (length($file) == 0){
+	unless (length $file) {
 		wprint("No file specified.\n");
 		return 0;
 	}
 
 	# Check if file can be opened
-	my $success = open(my $tFILE, $file);
-	if (!$success){
-		wprint("Could not open |$file|, skipping.\n");
+	open my $tFILE, $file or do {
+		wprint(qq{Could not open "$file": $!\n});
 		return 0;
-	}
+	};
 
-	close($tFILE);
-	debugPrint("|$file| exists and opened successfully.\n");
+	close $tFILE;
+	debugPrint(qq{"$file"" exists and opened successfully.\n});
 	return 1;
 }
 
@@ -331,19 +320,18 @@ sub checkConfig {
 	# This allows you to keep different preferences for different projects
 
 	# Check for rc
-	# -z checks if filesize is 0
-	debugPrint("[Checking for $RCNAME] \n");
-	if (! -e "$RCNAME"){
-		debugPrint("$RCNAME not found! \n");
-		debugPrint("Creating default $RCNAME \n");
-
-		# Create default rc
-		createRC("$RCNAME");
-		return 0;
+	debugPrint("[Checking for $RCNAME]\n");
+	if (-e $RCNAME) {
+		debugPrint("$RCNAME found\n\n");
+		return 1;
 	}
 	else {
-		debugPrint("$RCNAME found \n\n");
-		return 1;
+		debugPrint("$RCNAME not found!\n");
+		debugPrint("Creating default $RCNAME\n");
+
+		# Create default rc
+		createRC($RCNAME);
+		return 0;
 	}
 }
 
@@ -355,9 +343,10 @@ sub checkConfig {
 # Create default RC file with some generic settings
 sub createRC {
 	my ($file_name) = @_;
-	open(my $file, "+>>", "$RCNAME");
+	open my $file, "+>>", $file_name or die qq{Can't open "$file_name": $!};
+
 # [fixme] - Figure out a way to indent this?
-my $rcdefault = <<EOF;
+my $rcdefault = <<'EOF';
 # watson rc
 # watson - inline issue manager
 # [goosecode] labs / 2012
@@ -383,7 +372,6 @@ EOF
 
 	debugPrint($rcdefault);
 	# Print default rc above to specified file
-	# [fixme] - Get return
 	my $success = print $file $rcdefault;
 	close($file);
 	return $success;
@@ -402,264 +390,219 @@ sub parseCommandLine {
 	my @opts = ("-d", "--dirs",
 				"-f", "--files",
 				"-h", "--help",
+				"-v", "--version",
 				"-t", "--tags",
 				"-p", "--parse-depth",
 				"-i", "--ignore",
 				"-r", "--remote",
 				"-u", "--update");
+	@$_{@opts} = () for \my %opts;
+	my %long_opts = @opts;
 
 
 	# Check number of command lines, skip if invalid
-	if ($#ARGV > -1){
-		for (my $i = 0; $i < $#ARGV + 1; $i++){
-			debugPrint("Main Index: $i: $ARGV[$i]\n");
+	unless (@ARGV) {
+		debugPrint("No command line arguments passed.\n\n");
+		return;
+	}
 
-			if ($ARGV[$i] eq "-h" || $ARGV[$i] eq "--help"){
+	for (my $i = 0; $i < @ARGV; $i++) {
+		debugPrint("Main Index: $i: $ARGV[$i]\n");
+
+		my $slurp_items = sub {
+			my ($cb) = @_;
+			my $count = 0;
+
+			# Keep checking following options until another flag or end
+			for (my $j = $i + 1; $j < @ARGV; $j++) {
+				my $item = $ARGV[$j];
+
+				if (exists $opts{$item}) {
+					debugPrint("Found a flag: $item\n");
+					last;
+				}
+				$count++;
+
+				$cb->($item);
+			}
+
+			# Set main loop index to correct value
+			$i += $count;
+		};
+
+		my %flag_actions = (
+			'--help' => sub {
 				debugPrint("Help flag passed\n");
 				printHelp();
 				cExit(0);
-			}
-
-			if ($ARGV[$i] eq "-v" || $ARGV[$i] eq "--version"){
+			},
+			'--version' => sub {
 				debugPrint("Version flag passed\n");
 				printVersion();
 				cExit(0);
-			}
-
-			if ($ARGV[$i] eq "-p" || $ARGV[$i] eq "--parse-depth"){
+			},
+			'--parse-depth' => sub {
 				debugPrint("Parse Depth flag passed\n");
 				# Check to make sure next param is a valid number (non-negative)
-				if ( $ARGV[$i + 1] =~ m/^([0-9]+)$/ ){
-					$MAX_DEPTH = $ARGV[$i + 1];
-					debugPrint("Valid parse depth: $MAX_DEPTH\n");
-				}
-				else {
-					wprint(BOLD "[ ", RESET);
-					wprint(BOLD MAGENTA "! ", RESET);
-					wprint(BOLD "] ", RESET);
+
+				if ($ARGV[$i + 1] =~ /[^0-9]/) {
+					wprint(box(BOLD MAGENTA "!"));
 					wprint("--> ", RESET);
 					wprint("Invalid parse depth passed\n");
+					return;
 				}
+
+				$MAX_DEPTH = $ARGV[$i + 1];
+				debugPrint("Valid parse depth: $MAX_DEPTH\n");
 
 				# Move index to two after (flag and value)
 				$i = $i + 2;
-
-			}
-
-			if ($ARGV[$i] eq "-r" || $ARGV[$i] eq "--remote"){
+			},
+			'--remote' => sub {
 				debugPrint("Remote Flag passed\n");
 
 				# When generating OAuth Token for github/bitbucket
 				# no other params should be passed
-				if ($i != 0 || $#ARGV > 1){
+				if ($i != 0 || @ARGV > 2){
 					debugPrint("Not the first flag, exiting\n");
-					print BOLD "[ ", RESET;
-					print BOLD RED "x ", RESET;
-					print BOLD "] ", RESET;
+					print box(BOLD RED "x");
 					print "Please run remote flag alone to generate GitHub/Bitbucket OAuth token\n";
 					print "      See help for more details\n";
 					cExit(1);
 				}
 
 				# Can only do this if we have cURL on the system
-				if (! $HASCURL ){
-					print BOLD "[ ", RESET;
-					print BOLD RED "x ", RESET;
-					print BOLD "] ", RESET;
+				if (! $HASCURL){
+					print box(BOLD RED "x");
 					print "It looks like you don't have cURL\n";
 					print "      We currently only support remote issues if you have cURL\n";
 					print "      Make sure cURL is installed and in your PATH\n";
 					cExit(1);
 				}
 
-				if 	  (lc($ARGV[$i + 1]) eq "bitbucket"){ bitbucketSetup(); }
-			   	elsif (lc($ARGV[$i + 1]) eq "github"   ){ githubSetup(); }
-				elsif ($ARGV[$i + 1] eq "")  {
-						# Check if config exists, if so, parse it
-						parseConfig() if checkConfig();
+				if (lc($ARGV[$i + 1]) eq "bitbucket") {
+					bitbucketSetup();
+				}
+				elsif (lc $ARGV[$i + 1]  eq "github") {
+					githubSetup();
+				}
+				elsif ($ARGV[$i + 1] eq "") {
+					# Check if config exists, if so, parse it
+					parseConfig() if checkConfig();
 
-						if ($BITBUCKET_API eq "" && $GITHUB_API eq "") {
-							print BOLD "[ ", RESET;
-							print BOLD RED "x ", RESET;
-							print BOLD "] ", RESET;
-							print BOLD "No remotes currently exist\n", RESET;
-							print BOLD "      Pass github or bitbucket to watson -r to add\n", RESET;
-							print "      That's all we support right now :(\n";
-							print "      See help for more details\n";
-							cExit(1);
-						}
-
-						if ($BITBUCKET_API ne ""){
-							print BOLD "[ ", RESET;
-							print BOLD GREEN "Bitbucket ", RESET;
-							print BOLD "]\n", RESET;
-							print BOLD "   Bitbucket User :", RESET, " $BITBUCKET_API\n";
-							print BOLD "   Bitbucket Repo :", RESET, " $BITBUCKET_REPO\n";
-							print "\n";
-						}
-
-						if ($GITHUB_API ne ""){
-							print BOLD "[ ", RESET;
-							print BOLD GREEN "GitHub ", RESET;
-							print BOLD "]\n", RESET;
-							print BOLD "   GitHub Key  :", RESET, " $GITHUB_API\n";
-							print BOLD "   GitHub Repo :", RESET, " $GITHUB_REPO\n";
-							print "\n";
-						}
-
+					if ($BITBUCKET_API eq "" && $GITHUB_API eq "") {
+						print box(BOLD RED "x");
+						print BOLD "No remotes currently exist\n", RESET;
+						print BOLD "      Pass github or bitbucket to watson -r to add\n", RESET;
+						print "      That's all we support right now :(\n";
+						print "      See help for more details\n";
 						cExit(1);
+					}
+
+					if ($BITBUCKET_API ne "") {
+						print box(BOLD GREEN "Bitbucket"), "\n";
+						print BOLD "   Bitbucket User :", RESET, " $BITBUCKET_API\n";
+						print BOLD "   Bitbucket Repo :", RESET, " $BITBUCKET_REPO\n";
+						print "\n";
+					}
+
+					if ($GITHUB_API ne "") {
+						print BOLD "[ ", RESET;
+						print BOLD GREEN "GitHub ", RESET;
+						print BOLD "]\n", RESET;
+						print BOLD "   GitHub Key  :", RESET, " $GITHUB_API\n";
+						print BOLD "   GitHub Repo :", RESET, " $GITHUB_REPO\n";
+						print "\n";
+					}
+
+					cExit(1);
 				}
 				else {
-					print BOLD "[ ", RESET;
-					print BOLD RED "x ", RESET;
-					print BOLD "] ", RESET;
+					print box(BOLD RED "x");
 					print BOLD "Incorrect argument\n", RESET;
 					print "      Please specify either github or bitbucket to setup remote\n";
 					print "      Or pass without argument to see current remotes\n";
 					print "      See help for more details\n";
 					cExit(1);
 				}
-
-			}
-
-
-			if ($ARGV[$i] eq "-d" || $ARGV[$i] eq "--dirs"){
+			},
+			'--dirs' => sub {
 				debugPrint("Dir flag passed\n");
-				# Keep track of number of args for when we exit loop
-				my $count = 0;
+				$slurp_items->(sub {
+					my ($dir) = @_;
+					debugPrint("Dir Index: $dir\n");
 
-				# Keep checking following options until another flag or end
-				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
-					# [fixme] - better way to check if its not a flag?
-					if (!grep /$ARGV[$j]/, @opts){
+					if (checkDir($dir)) {
+						debugPrint("dirflag: {$dir} valid directory, added from CL.\n");
 
-						debugPrint("Dir Index: $j: $ARGV[$j]\n");
-						$count++;
-						if (checkDir($ARGV[$j])){
+						# If we ever get into this, means CL passed
+						# Set RC ignore so we don't look at rc
+						debugPrint("Ignoring RC Files/Dirs\n\n");
+						$IGNORE_RC_DIRS = 1;
 
-							debugPrint("dirflag: {$ARGV[$j]} valid directory, added from CL.\n");
-
-							# If we ever get into this, means CL passed
-							# Set RC ignore so we don't look at rc
-							debugPrint("Ignoring RC Files/Dirs\n\n");
-							$IGNORE_RC_DIRS = 1;
-
-							# Remove trailing slashes
-							$ARGV[$j] =~ s/(\/)+$//;
-							push(@DIRS, $ARGV[$j]);
-						}
+						# Remove trailing slashes
+						$dir =~ s{/+\z}{};
+						push @DIRS, $dir;
 					}
-					else {
-						debugPrint("Found a flag: $ARGV[$j]\n");
-						last;
-					}
-				}
-				# Set main loop index to correct value
-				$i += $count;
-
-			}
-
-
-			if ($ARGV[$i] eq "-f" || $ARGV[$i] eq "--files"){
+				});
+			},
+			'--files' => sub {
 				debugPrint("File flag passed\n");
-				# Keep track of number of args for when we exit loop
-				my $count = 0;
+				$slurp_items->(sub {
+					my ($file) = @_;
+					debugPrint("File Index: $file\n");
 
-				# Keep checking following options until another flag or end
-				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
-					# [fixme] - better way to check if its not a flag?
-					if (!grep /$ARGV[$j]/, @opts){
+					if (checkFile($file)) {
+						debugPrint("fileflag: {$file} valid file, added from CL.\n");
 
-						debugPrint("File Index: $j: $ARGV[$j]\n");
-						$count++;
-						if (checkFile($ARGV[$j])){
+						# If we ever get into this, means CL passed
+						# Set RC ignore so we don't look at rc
+						debugPrint("Ignoring RC Files/Dirs\n\n");
+						$IGNORE_RC_FILES = 1;
 
-							debugPrint("fileflag: {$ARGV[$j]} valid file, added from CL.\n");
-
-							# If we ever get into this, means CL passed
-							# Set RC ignore so we don't look at rc
-							debugPrint("Ignoring RC Files/Dirs\n\n");
-							$IGNORE_RC_FILES = 1;
-
-							push(@FILES, $ARGV[$j]);
-						}
+						push @FILES, $file;
 					}
-					else {
-						debugPrint("Found a flag: $ARGV[$j]\n");
-						last;
-					}
-				}
-				# Set main loop index to correct value
-				$i += $count;
-			}
-
-
-			if ($ARGV[$i] eq "-t" || $ARGV[$i] eq "--tags"){
+				});
+			},
+			'--tags' => sub {
 				debugPrint("Tag flag passed\n");
-				# Keep track of number of args for when we exit loop
-				my $count = 0;
+				$slurp_items->(sub {
+					my ($tag) = @_;
+					debugPrint("Tag Index: $tag\n");
+					debugPrint("tagflag: {$tag} added from CL.\n");
 
-				# Keep checking following options until another flag or end
-				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
-					# [fixme] - better way to check if its not a flag?
-					if (!grep /$ARGV[$j]/, @opts){
+					# If we ever get into this, means CL passed
+					# Set RC ignore so we don't look at rc
+					debugPrint("Ignoring RC tags\n\n");
+					$IGNORE_RC_TAGS = 1;
 
-						debugPrint("Tag Index: $j: $ARGV[$j]\n");
-						$count++;
+					push @TAGS, $tag;
+				});
+			},
+			'--ignore' => sub {
+				debugPrint("Tag flag passed\n");
+				$slurp_items->(sub {
+					my ($ignoreflag) = @_;
+					debugPrint("Ignore Index: $ignoreflag\n");
+					debugPrint("ignoreflag: {$ignoreflag} added from CL.\n");
 
-						debugPrint("tagflag: {$ARGV[$j]} added from CL.\n");
+					# If we ever get into this, means CL passed
+					# Set RC ignore so we don't look at rc
+					debugPrint("Ignoring RC ignore\n\n");
+					$IGNORE_RC_IGNORE = 1;
 
-						# If we ever get into this, means CL passed
-						# Set RC ignore so we don't look at rc
-						debugPrint("Ignoring RC tags\n\n");
-						$IGNORE_RC_TAGS = 1;
+					push @IGNORE, $ignoreflag;
+				});
+			},
+		);
+		$flag_actions{$_} = $flag_actions{$long_opts{$_}} for keys %long_opts;
 
-						push(@TAGS, $ARGV[$j]);
-					}
-					else {
-						debugPrint("Found a flag: $ARGV[$j]\n");
-						last;
-					}
-				}
-				# Set main loop index to correct value
-				$i += $count;
-			}
-
-
-			if ($ARGV[$i] eq "-i" || $ARGV[$i] eq "--ignore"){
-				debugPrint("Ignore flag passed\n");
-				# Keep track of number of args for when we exit loop
-				my $count = 0;
-
-				# Keep checking following options until another flag or end
-				for (my $j = $i + 1; $j < $#ARGV + 1; $j++){
-					# [fixme] - better way to check if its not a flag?
-					if (!grep /$ARGV[$j]/, @opts){
-
-						debugPrint("Ignore Index: $j: $ARGV[$j]\n");
-						$count++;
-
-						debugPrint("ignoreflag: {$ARGV[$j]} added from CL.\n");
-
-						# If we ever get into this, means CL passed
-						# Set RC ignore so we don't look at rc
-						debugPrint("Ignoring RC ignore\n\n");
-						$IGNORE_RC_IGNORE = 1;
-
-						push(@IGNORE, $ARGV[$j]);
-					}
-					else {
-						debugPrint("Found a flag: $ARGV[$j]\n");
-						last;
-					}
-				}
-				# Set main loop index to correct value
-				$i += $count;
-			}
+		if (my $action = $flag_actions{$ARGV[$i]}) {
+			$action->();
 		}
-	}
-	else {
-		debugPrint("No command line arguments passed.\n\n");
+		else {
+			die qq{Can't understand command line argument "$ARGV[$i]"};
+		}
 	}
 	return 1;
 }
@@ -677,11 +620,7 @@ sub parseConfig {
 	open(my $rc, "<", "$RCNAME");
 
 	# Add . and .. and .git to ignorelist
-	push(@IGNORE, ".");
-	push(@IGNORE, "..");
-	push(@IGNORE, "*.swp");
-	push(@IGNORE, ".watsonrc");
-	push(@IGNORE, $TMPOUT);
+	push @IGNORE, ".", "..", "*.swp", ".watsonrc", $TMPOUT;
 
 
 	# Read rc line by line
@@ -1945,6 +1884,16 @@ sub postBitbucket {
 			debugPrint($response);
 		}
 	}
+}
+
+
+##########################
+# Box glyph, e.g [!], [x]
+##########################
+
+sub box {
+	my $content = join '', @_;
+	return BOLD, "[ ", RESET, $content, RESET, BOLD, " ]", RESET;
 }
 
 # kate: space-indent off; indent-width 4; mixedindent off; indent-mode cstyle;
