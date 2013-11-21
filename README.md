@@ -14,19 +14,19 @@ The easiest way to get watson-perl is probably...
 ```
 # Download watson to current directory with wget
 # and set watson to executable
-wget -O http://github.com/nhmood/watson-perl/watson perl
+wget https://raw.github.com/nhmood/watson-perl/master/watson -O watson
 sudo chmod +x watson 
 
 # OR Download watson to current directory with curl
 # and set watson to executable
-curl http://github.com/nhmood/watson-perl/watson-perl 
+curl curl http://github.com/nhmood/watson-perl/watson-perl -o watson
 sudo chmod +x watson 
 
-# Copy watson-perl to /usr/bin, which is most likely in your PATH
-sudo cp watson-perl /usr/bin
+# Copy watson to /usr/bin, which is most likely in your PATH
+sudo cp watson /usr/bin
 
 # OR make a soft link to it into /usr/bin
-sudo ln -s watson-perl /usr/bin
+sudo ln -s watson /usr/bin
 
 ```
 You could clone the repo and then perform the linking step so all you need to do to update watson-perl is a ```git pull``` to stay up to date without having to redownload.  
