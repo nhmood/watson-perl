@@ -74,7 +74,6 @@ my $BITBUCKET_REPO;
 my $BITBUCKET_OPEN_ISSUES;
 my $BITBUCKET_CLOSED_ISSUES;
 my $MAX_DEPTH = 0;
-my $DEPTH = 0;
 my $IGNORE_RC_DIRS = 0;
 my $IGNORE_RC_FILES = 0;
 my $IGNORE_RC_TAGS = 0;
@@ -747,22 +746,15 @@ sub startScan{
 	if ($IGNORE_RC_FILES){
 		# For each file obtained from CL (if any) parse file
 		# Create proper structure for files so we can push to @STRUCTURE
-		my $structure = {};
-		my @tfiles = ();
-		foreach my $file (@FILES){
-			push(@tfiles, parseFile($file));
-		}
-
-		$structure->{files} = \@tfiles;
-		push(@STRUCTURE, $structure);
+		push @STRUCTURE, {
+			files => [ map { parseFile($_) } @FILES ],
+		};
 	}
 
 	# For each directory obtained from rc or CL, look for files in them
 	# This will always be valid, not condition like files above
-	foreach my $dir (@DIRS){
-		push(@STRUCTURE, parseDirs($dir));
-		# Reset DEPTH on directories specified (not dirs found within)
-		$DEPTH = 0;
+	for my $dir (@DIRS){
+		push @STRUCTURE, parseDirs($dir);
 	}
 
 	wprint("\n");
@@ -776,108 +768,61 @@ sub startScan{
 
 # Look through directory for files to parse
 sub parseDirs {
-	my ($dir) = @_;
-	debugPrint("parseDirs: |$dir|\n");
+	my ($dir, $depth) = @_;
+	$depth //= 1;
+	return if $MAX_DEPTH and $depth > $MAX_DEPTH;
+	debugPrint("parseDirs: |$dir| at depth $depth\n");
+	return unless checkDir($dir); # Error check for input
 
 	my @pdirs;		# subdirectories found
 	my @pfiles;		# files found
 
-
-
-	# Error check for input
-	if (!checkDir($dir)){
-		return 0;
-	}
-
-	# [fixme] - add option to stop from going deeper dirs (depth?)
 	# Loop through all entries in directory
-	debugPrint("Looping through all files/folders in |$dir|\n");
+	debugPrint(qq{Looping through all files/folders in "$dir"\n});
 
 	# Open dir and get list of all files
-	opendir(my $wd, $dir);
-	my @dirlist = sort(readdir($wd));
-
-	foreach my $entry (@dirlist){
-		# Create singular $path var to parse
-		# Remove trailing slashes
-		$dir =~ s/^(\/)+$//;
-
+	opendir my $wd, $dir or die qq{Can't open directory "$dir": $!};
+	ENTRY: for my $entry (sort grep !/\.\.?/, readdir $wd) {
 		# Combine dir and entry to make full path
 		my $path = "$dir/$entry";
-
-		# Remove leading ., /, or ./
-		$path =~ s/^((\.)?(\/)?)//;
 
 		debugPrint("path: |$path|\n");
 
 		# Make sure it isn't part of ignored list
 		# If it is, set to "", won't pass dir/file check
 		# [reviewme] - Should we warn users when file is ignored on stdout?
-		foreach my $ignore (@IGNORE){
+		for my $ignore (@IGNORE){
 			# Check for any *.type in ignore list (list .swp)
 			# Regex to see if extension is .type, ignore if so
-			if ( substr($ignore, 0, 1) eq "*" ){
-				my $ignoretype = substr($ignore, 1);
-				if ( $entry =~ m/$ignoretype$/ ){
-					debugPrint("|$path| is on the ignore list, setting to nothing\n");
-					$path = "";
-				}
-			}
-			elsif ("$entry" eq "$ignore" | "$path" eq "$ignore"){
-				debugPrint("|$path| is on the ignore list, setting to nothing\n");
-				$path = "";
-				last;
+			($ignore) = map qr/\A$_\z/, join '.*', map quotemeta, split /[*]/, $ignore
+				unless ref $ignore;
+			if ($entry =~ /$ignore/) {
+				debugPrint("|$path| is on the ignore list, skipping\n");
+				next ENTRY;
 			}
 		}
 
 		# Check if entry is a file, if so parse
-		if (-f "$path"){
+		if (-f $path) {
 			debugPrint("|$path| is a file!\n");
-			push(@pfiles, parseFile("$path"));
+			push @pfiles, parseFile($path);
 		}
-
 		# Check if entry is dir, if so parse
-		elsif (-d "$path"){
+		elsif (-d $path) {
 			debugPrint("|$path| is a dir!\n");
-
-			# If MAX_DEPTH is 0, no limit on subdirs
-			# Increment DEPTH, compare with MAX_DEPTH
-			# If less than depth, parse dir, else ignore
-			$DEPTH++;
-			debugPrint("Folder depth: $DEPTH\n");
-			if ($MAX_DEPTH == 0){
-				debugPrint("No max depth, parsing folders\n");
-				push(@pdirs, parseDirs("$path"));
-			}
-			elsif ($DEPTH < $MAX_DEPTH){
-				debugPrint("Depth less than Max depth, parsing folder\n");
-				push(@pdirs, parseDirs("$path"));
-			}
-			else {
-				debugPrint("Depth greater than Max depth, ignoring\n");
-			}
-
+			push @pdirs, parseDirs($path, $depth + 1);
 		}
 
 		# Add directory to ignore list so it isn't repeated again
-		push(@IGNORE, $path);
-
+		push @IGNORE, $path;
 	}
 
-	closedir($wd);
+	closedir $wd;
 	# Create has to hold all parsed files and folders
-	my $structure = {};
-
-	# Still confused as to what this is actually doing but...
-	# Storing an array of hashes into structure->file hash
-	# I THINK?? that because the array consists of hashes (references)
-	# the \@pfiles will copy the actual values (or keep the references alive?)
-	# Either way, some scoping thing is solved with \@
-
-	$structure->{files} = \@pfiles;
-	$structure->{dirs} = \@pdirs;
-
-	return $structure;
+	return {
+		files => \@pfiles,
+		dirs => \@pdirs,
+	};
 }
 
 
