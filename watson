@@ -387,221 +387,225 @@ sub parseCommandLine {
 	debugPrint("[Checking CL args]\n");
 	debugPrint("Total args: ", $#ARGV + 1, "\n");
 
-	my @opts = ("-d", "--dirs",
-				"-f", "--files",
-				"-h", "--help",
-				"-v", "--version",
-				"-t", "--tags",
-				"-p", "--parse-depth",
-				"-i", "--ignore",
-				"-r", "--remote",
-				"-u", "--update");
-	@$_{@opts} = () for \my %opts;
-	my %long_opts = @opts;
+	my %long_opts = (
+		"-d" => "--dirs",
+		"-f" => "--files",
+		"-h" => "--help",
+		"-v" => "--version",
+		"-t" => "--tags",
+		"-p" => "--parse-depth",
+		"-i" => "--ignore",
+		"-r" => "--remote",
+		"-u" => "--update"
+	);
+	my %opts;
+	@opts{%long_opts} = ();
 
+	my $slurp_items = sub {
+		my ($cb) = @_;
+		my $count = 0;
 
-	# Check number of command lines, skip if invalid
+		# Keep checking following options until another flag or end
+		while (@ARGV) {
+			if (exists $opts{$ARGV[0]}) {
+				debugPrint("Found a flag: $ARGV[0]\n");
+				last;
+			}
+
+			my $item = shift @ARGV;
+			$cb->($item);
+		}
+	};
+
+	my %flag_actions = (
+		'--help' => sub {
+			debugPrint("Help flag passed\n");
+			printHelp();
+			cExit(0);
+		},
+		'--version' => sub {
+			debugPrint("Version flag passed\n");
+			printVersion();
+			cExit(0);
+		},
+		'--parse-depth' => sub {
+			debugPrint("Parse Depth flag passed\n");
+			# Check to make sure next param is a valid number (non-negative)
+
+			unless (@ARGV) {
+				wprint(box(BOLD RED "x"), "--parse-depth requires a numeric argument\n");
+			}
+
+			my $depth = shift @ARGV;
+
+			if ($depth =~ /[^0-9]/) {
+				wprint(box(BOLD MAGENTA "!"));
+				wprint("--> ", RESET);
+				wprint("Invalid parse depth passed\n");
+				return;
+			}
+
+			$MAX_DEPTH = $depth;
+			debugPrint("Valid parse depth: $MAX_DEPTH\n");
+		},
+		'--remote' => sub {
+			debugPrint("Remote Flag passed\n");
+
+			# When generating OAuth Token for github/bitbucket
+			# no other params should be passed
+			if (@ARGV > 1){
+				debugPrint("Not the only flag, exiting\n");
+				print box(BOLD RED "x");
+				print "Please run remote flag alone to generate GitHub/Bitbucket OAuth token\n";
+				print "      See help for more details\n";
+				cExit(1);
+			}
+
+			# Can only do this if we have cURL on the system
+			unless ($HASCURL) {
+				print box(BOLD RED "x");
+				print "It looks like you don't have cURL\n";
+				print "      We currently only support remote issues if you have cURL\n";
+				print "      Make sure cURL is installed and in your PATH\n";
+				cExit(1);
+			}
+
+			my $service = lc shift @ARGV;
+
+			if ($service eq "bitbucket") {
+				bitbucketSetup();
+			}
+			elsif ($service eq "github") {
+				githubSetup();
+			}
+			elsif ($service eq "") {
+				parseConfig() if checkConfig();
+
+				if ($BITBUCKET_API eq "" && $GITHUB_API eq "") {
+					print box(BOLD RED "x");
+					print BOLD "No remotes currently exist\n", RESET;
+					print BOLD "      Pass github or bitbucket to watson -r to add\n", RESET;
+					print "      That's all we support right now :(\n";
+					print "      See help for more details\n";
+					cExit(1);
+				}
+
+				if ($BITBUCKET_API ne "") {
+					print box(BOLD GREEN "Bitbucket"), "\n";
+					print BOLD "   Bitbucket User :", RESET, " $BITBUCKET_API\n";
+					print BOLD "   Bitbucket Repo :", RESET, " $BITBUCKET_REPO\n";
+					print "\n";
+				}
+
+				if ($GITHUB_API ne "") {
+					print BOLD "[ ", RESET;
+					print BOLD GREEN "GitHub ", RESET;
+					print BOLD "]\n", RESET;
+					print BOLD "   GitHub Key  :", RESET, " $GITHUB_API\n";
+					print BOLD "   GitHub Repo :", RESET, " $GITHUB_REPO\n";
+					print "\n";
+				}
+
+				cExit(1);
+			}
+			else {
+				print box(BOLD RED "x");
+				print BOLD "Incorrect argument\n", RESET;
+				print "      Please specify either github or bitbucket to setup remote\n";
+				print "      Or pass without argument to see current remotes\n";
+				print "      See help for more details\n";
+				cExit(1);
+			}
+		},
+		'--dirs' => sub {
+			debugPrint("Dir flag passed\n");
+			$slurp_items->(sub {
+				my ($dir) = @_;
+				debugPrint("Dir Index: $dir\n");
+
+				if (checkDir($dir)) {
+					debugPrint("dirflag: {$dir} valid directory, added from CL.\n");
+
+					# If we ever get into this, means CL passed
+					# Set RC ignore so we don't look at rc
+					debugPrint("Ignoring RC Files/Dirs\n\n");
+					$IGNORE_RC_DIRS = 1;
+
+					# Remove trailing slashes
+					$dir =~ s{/+\z}{};
+					push @DIRS, $dir;
+				}
+			});
+		},
+		'--files' => sub {
+			debugPrint("File flag passed\n");
+			$slurp_items->(sub {
+				my ($file) = @_;
+				debugPrint("File Index: $file\n");
+
+				if (checkFile($file)) {
+					debugPrint("fileflag: {$file} valid file, added from CL.\n");
+
+					# If we ever get into this, means CL passed
+					# Set RC ignore so we don't look at rc
+					debugPrint("Ignoring RC Files/Dirs\n\n");
+					$IGNORE_RC_FILES = 1;
+
+					push @FILES, $file;
+					}
+			});
+		},
+		'--tags' => sub {
+			debugPrint("Tag flag passed\n");
+			$slurp_items->(sub {
+				my ($tag) = @_;
+				debugPrint("Tag Index: $tag\n");
+				debugPrint("tagflag: {$tag} added from CL.\n");
+
+				# If we ever get into this, means CL passed
+				# Set RC ignore so we don't look at rc
+				debugPrint("Ignoring RC tags\n\n");
+				$IGNORE_RC_TAGS = 1;
+
+				push @TAGS, $tag;
+			});
+		},
+		'--ignore' => sub {
+			debugPrint("Tag flag passed\n");
+			$slurp_items->(sub {
+				my ($ignoreflag) = @_;
+				debugPrint("Ignore Index: $ignoreflag\n");
+				debugPrint("ignoreflag: {$ignoreflag} added from CL.\n");
+
+				# If we ever get into this, means CL passed
+				# Set RC ignore so we don't look at rc
+				debugPrint("Ignoring RC ignore\n\n");
+				$IGNORE_RC_IGNORE = 1;
+
+				push @IGNORE, $ignoreflag;
+			});
+		},
+	);
+	for my $key (keys %long_opts) {
+		$flag_actions{$key} = $flag_actions{$long_opts{$key}};
+		exists $flag_actions{$key}
+			or warn "The option $long_opts{$key} is not implemented";
+	}
+
 	unless (@ARGV) {
 		debugPrint("No command line arguments passed.\n\n");
 		return;
 	}
 
-	for (my $i = 0; $i < @ARGV; $i++) {
-		debugPrint("Main Index: $i: $ARGV[$i]\n");
+	while (@ARGV) {
+		my $item = shift @ARGV;
+		debugPrint("Main Item: $item\n");
 
-		my $slurp_items = sub {
-			my ($cb) = @_;
-			my $count = 0;
-
-			# Keep checking following options until another flag or end
-			for (my $j = $i + 1; $j < @ARGV; $j++) {
-				my $item = $ARGV[$j];
-
-				if (exists $opts{$item}) {
-					debugPrint("Found a flag: $item\n");
-					last;
-				}
-				$count++;
-
-				$cb->($item);
-			}
-
-			# Set main loop index to correct value
-			$i += $count;
-		};
-
-		my %flag_actions = (
-			'--help' => sub {
-				debugPrint("Help flag passed\n");
-				printHelp();
-				cExit(0);
-			},
-			'--version' => sub {
-				debugPrint("Version flag passed\n");
-				printVersion();
-				cExit(0);
-			},
-			'--parse-depth' => sub {
-				debugPrint("Parse Depth flag passed\n");
-				# Check to make sure next param is a valid number (non-negative)
-
-				if ($ARGV[$i + 1] =~ /[^0-9]/) {
-					wprint(box(BOLD MAGENTA "!"));
-					wprint("--> ", RESET);
-					wprint("Invalid parse depth passed\n");
-					return;
-				}
-
-				$MAX_DEPTH = $ARGV[$i + 1];
-				debugPrint("Valid parse depth: $MAX_DEPTH\n");
-
-				# Move index to two after (flag and value)
-				$i = $i + 2;
-			},
-			'--remote' => sub {
-				debugPrint("Remote Flag passed\n");
-
-				# When generating OAuth Token for github/bitbucket
-				# no other params should be passed
-				if ($i != 0 || @ARGV > 2){
-					debugPrint("Not the first flag, exiting\n");
-					print box(BOLD RED "x");
-					print "Please run remote flag alone to generate GitHub/Bitbucket OAuth token\n";
-					print "      See help for more details\n";
-					cExit(1);
-				}
-
-				# Can only do this if we have cURL on the system
-				if (! $HASCURL){
-					print box(BOLD RED "x");
-					print "It looks like you don't have cURL\n";
-					print "      We currently only support remote issues if you have cURL\n";
-					print "      Make sure cURL is installed and in your PATH\n";
-					cExit(1);
-				}
-
-				if (lc($ARGV[$i + 1]) eq "bitbucket") {
-					bitbucketSetup();
-				}
-				elsif (lc $ARGV[$i + 1]  eq "github") {
-					githubSetup();
-				}
-				elsif ($ARGV[$i + 1] eq "") {
-					# Check if config exists, if so, parse it
-					parseConfig() if checkConfig();
-
-					if ($BITBUCKET_API eq "" && $GITHUB_API eq "") {
-						print box(BOLD RED "x");
-						print BOLD "No remotes currently exist\n", RESET;
-						print BOLD "      Pass github or bitbucket to watson -r to add\n", RESET;
-						print "      That's all we support right now :(\n";
-						print "      See help for more details\n";
-						cExit(1);
-					}
-
-					if ($BITBUCKET_API ne "") {
-						print box(BOLD GREEN "Bitbucket"), "\n";
-						print BOLD "   Bitbucket User :", RESET, " $BITBUCKET_API\n";
-						print BOLD "   Bitbucket Repo :", RESET, " $BITBUCKET_REPO\n";
-						print "\n";
-					}
-
-					if ($GITHUB_API ne "") {
-						print BOLD "[ ", RESET;
-						print BOLD GREEN "GitHub ", RESET;
-						print BOLD "]\n", RESET;
-						print BOLD "   GitHub Key  :", RESET, " $GITHUB_API\n";
-						print BOLD "   GitHub Repo :", RESET, " $GITHUB_REPO\n";
-						print "\n";
-					}
-
-					cExit(1);
-				}
-				else {
-					print box(BOLD RED "x");
-					print BOLD "Incorrect argument\n", RESET;
-					print "      Please specify either github or bitbucket to setup remote\n";
-					print "      Or pass without argument to see current remotes\n";
-					print "      See help for more details\n";
-					cExit(1);
-				}
-			},
-			'--dirs' => sub {
-				debugPrint("Dir flag passed\n");
-				$slurp_items->(sub {
-					my ($dir) = @_;
-					debugPrint("Dir Index: $dir\n");
-
-					if (checkDir($dir)) {
-						debugPrint("dirflag: {$dir} valid directory, added from CL.\n");
-
-						# If we ever get into this, means CL passed
-						# Set RC ignore so we don't look at rc
-						debugPrint("Ignoring RC Files/Dirs\n\n");
-						$IGNORE_RC_DIRS = 1;
-
-						# Remove trailing slashes
-						$dir =~ s{/+\z}{};
-						push @DIRS, $dir;
-					}
-				});
-			},
-			'--files' => sub {
-				debugPrint("File flag passed\n");
-				$slurp_items->(sub {
-					my ($file) = @_;
-					debugPrint("File Index: $file\n");
-
-					if (checkFile($file)) {
-						debugPrint("fileflag: {$file} valid file, added from CL.\n");
-
-						# If we ever get into this, means CL passed
-						# Set RC ignore so we don't look at rc
-						debugPrint("Ignoring RC Files/Dirs\n\n");
-						$IGNORE_RC_FILES = 1;
-
-						push @FILES, $file;
-					}
-				});
-			},
-			'--tags' => sub {
-				debugPrint("Tag flag passed\n");
-				$slurp_items->(sub {
-					my ($tag) = @_;
-					debugPrint("Tag Index: $tag\n");
-					debugPrint("tagflag: {$tag} added from CL.\n");
-
-					# If we ever get into this, means CL passed
-					# Set RC ignore so we don't look at rc
-					debugPrint("Ignoring RC tags\n\n");
-					$IGNORE_RC_TAGS = 1;
-
-					push @TAGS, $tag;
-				});
-			},
-			'--ignore' => sub {
-				debugPrint("Tag flag passed\n");
-				$slurp_items->(sub {
-					my ($ignoreflag) = @_;
-					debugPrint("Ignore Index: $ignoreflag\n");
-					debugPrint("ignoreflag: {$ignoreflag} added from CL.\n");
-
-					# If we ever get into this, means CL passed
-					# Set RC ignore so we don't look at rc
-					debugPrint("Ignoring RC ignore\n\n");
-					$IGNORE_RC_IGNORE = 1;
-
-					push @IGNORE, $ignoreflag;
-				});
-			},
-		);
-		$flag_actions{$_} = $flag_actions{$long_opts{$_}} for keys %long_opts;
-
-		if (my $action = $flag_actions{$ARGV[$i]}) {
+		if (my $action = $flag_actions{$item}) {
 			$action->();
 		}
 		else {
-			die qq{Can't understand command line argument "$ARGV[$i]"};
+			die qq{Can't understand command line argument "$item"};
 		}
 	}
 	return 1;
@@ -621,7 +625,6 @@ sub parseConfig {
 
 	# Add . and .. and .git to ignorelist
 	push @IGNORE, ".", "..", "*.swp", ".watsonrc", $TMPOUT;
-
 
 	# Read rc line by line
 	my $section = "";
