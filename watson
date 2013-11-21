@@ -621,112 +621,116 @@ sub parseConfig {
 	# Parse rc
 	debugPrint("Parsing $RCNAME\n");
 
-	open(my $rc, "<", "$RCNAME");
+	open my $rc, "<", $RCNAME or die qq{Can't open "$RCNAME": $!};
 
 	# Add . and .. and .git to ignorelist
 	push @IGNORE, ".", "..", "*.swp", ".watsonrc", $TMPOUT;
+
+
+	my %sections = (
+		# If @DIRS or @FILES wasn't populated by CL args, populate from rc
+		dirs => sub {
+			my ($line) = @_;
+			if ($IGNORE_RC_DIRS || $IGNORE_RC_FILES) {
+				debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+				return;
+			}
+			# Regex for dirs, then push to @DIRS
+			$line =~ m{\A\s* ((?:\.?/?\w?+/?)+) \s*\z}x
+				or die qq{The line "$line" in a "dirs" section did not contain a valid path};
+			($line = $1) =~ s{/+\z}{};
+			debugPrint("dirs: $line added from rc. \n");
+			push @DIRS, $line;
+		},
+		# If @TAGS wasn't populated by CL args, populate from rc
+		tags => sub {
+			my ($line) = @_;
+			if ($IGNORE_RC_TAGS) {
+				debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+				return;
+			}
+			# Regex for tags, then push to @TAGS
+			$line =~ /^\A\s* (\w+(?: \| [0-9])?) \s*\z/x
+				or die qq{The line "$line" in a "tags" section did not contain a valid tag};
+			my $tag = $1;
+			debugPrint("tags: $tag added from rc.\n");
+			push @TAGS, $tag;
+		},
+		# If @IGNORE wasn't populated by CL args, populate from rc
+		ignore => sub {
+			my ($line) = @_;
+			if ($IGNORE_RC_IGNORE) {
+				debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
+				return;
+			}
+			# Regex for dirs to ignore, then push to @IGNOREDIR
+
+			$line =~ m{\A\s* ((/?\w+/?)+) \s*\z}x
+				or die qq{The line "$line" is a "ignore" section did not contain a valid path};
+			(my $path = $1) =~ s{(/)+\z}{};
+			debugPrint("ignore: $path added from rc.\n");
+			push @IGNORE, $path;
+		},
+		github => sub {
+			my ($line) = @_;
+			# No need for regex on API key
+			debugPrint("GitHub API: $line\n");
+			$GITHUB_API = $line;
+		},
+		bitbucket => sub {
+			my ($line) = @_;
+			# No need for regex on API key
+			debugPrint("Bitbucket API: $line\n");
+			$BITBUCKET_API = $line;
+		},
+		githubrepo => sub {
+			my ($line) = @_;
+			# No need for regex on repo
+			debugPrint("GitHub Repo: $line\n");
+			$GITHUB_REPO = $line;
+
+			# If setting up remote, don't ask for password / do any remote stuff
+			# Won't need this when OAuth implemented but it does optimize the code...
+
+			# Get list of issues, also checks if API key is valid
+			getGithubIssues() unless $REMOTESETUP
+		},
+		bitbucketrepo => sub {
+			my ($line) = @_;
+			# No need for regex on repo
+			debugPrint("Bitbucket Repo: $line\n");
+			$BITBUCKET_REPO = $line;
+
+			# If setting up remote, don't ask for password / do any remote stuff
+			# Won't need this when OAuth implemented but it does optimize the code...
+			# Get list of issues, also checks if API key is valid
+			getBitbucketIssues() unless $REMOTESETUP;
+		},
+	);
 
 	# Read rc line by line
 	my $section = "";
 	while (my $line = <$rc>){
 	    debugPrint($line);
+		chomp $line;
 
 		# Ignore full line comments
-	    if ($line !~ m/^#/ && $line =~ /\S/){
-			# Regex to find [section], store into $section and continue to the
-			# next line until a new section
-			if ($line =~ /^\[(\w+)\]/){
-			    $section = $1;
-			    next;
-			}
+		next if $line =~ /^#/ or $line !~ /\S/;
 
-			# If @DIRS or @FILES wasn't populated by CL args, populate from rc
-			if ($section eq "dirs"){
-			    if ($IGNORE_RC_DIRS == 1 || $IGNORE_RC_FILES == 1) {
-					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
-			    }
-			    else {
-	    	        # Regex for dirs, then push to @DIRS
-					$line =~ /^((\.?\/?\w?+\/?)+)/;
-					$line = $1;
-					$line =~ s/(\/)+$//;
-					debugPrint("dirs: $line added from rc. \n");
-					push(@DIRS, $line);
-			    }
-			}
+		# Regex to find [section], store into $section and continue to the
+		# next line until a new section
+		if ($line =~ /^\[(\w+)\]/){
+			$section = $1;
+			next;
+		}
 
-			# If @TAGS wasn't populated by CL args, populate from rc
-			elsif ($section eq "tags"){
-			    if ($IGNORE_RC_TAGS == 1) {
-					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
-			    }
-				else {
-					# Regex for tags, then push to @TAGS
-			    	$line =~ /^(\w+( \| [0-9])?)/;
-			    	debugPrint("tags: $1 added from rc. \n");
-			    	push(@TAGS, $1);
-				}
-			}
-
-			# If @IGNORE wasn't populated by CL args, populate from rc
-			elsif ($section eq "ignore"){
-			    if ($IGNORE_RC_IGNORE == 1) {
-					debugPrint("Directories set from command line, ignoring rc [dirs]!\n");
-			    }
-				else {
-					# Regex for dirs to ignore, then push to @IGNOREDIR
-
-					$line =~ /^((\/?\w+\/?)+)/;
-					$line = $1;
-					$line =~ s/(\/)+$//;
-					debugPrint("ignore: $line added from rc.\n");
-					push(@IGNORE, $line);
-				}
-			}
-			elsif ($section eq "github"){
-				# No need for regex on API key
-				debugPrint("GitHub API: $line\n");
-				chomp($line);
-				$GITHUB_API = $line;
-			}
-			elsif ($section eq "bitbucket"){
-				# No need for regex on API key
-				debugPrint("Bitbucket API: $line\n");
-				chomp($line);
-				$BITBUCKET_API = $line;
-			}
-			elsif ($section eq "githubrepo"){
-				# No need for regex on repo
-				debugPrint("GitHub Repo: $line\n");
-				chomp($line);
-				$GITHUB_REPO = $line;
-
-				# If setting up remote, don't ask for password / do any remote stuff
-				# Won't need this when OAuth implemented but it does optimize the code...
-				if (!$REMOTESETUP){
-					# Get list of issues, also checks if API key is valid
-					getGithubIssues();
-				}
-			}
-			elsif ($section eq "bitbucketrepo"){
-				# No need for regex on repo
-				debugPrint("Bitbucket Repo: $line\n");
-				chomp($line);
-				$BITBUCKET_REPO = $line;
-
-				# If setting up remote, don't ask for password / do any remote stuff
-				# Won't need this when OAuth implemented but it does optimize the code...
-				if (!$REMOTESETUP){
-					# Get list of issues, also checks if API key is valid
-					getBitbucketIssues();
-				}
-			}
-
-	    }
+		my $action = $sections{$section}
+			or die qq{Unknown section "$section"};
+		$action->($line);
 	}
 
 	debugPrint("\n\n\n");
-	close($rc);
+	close $rc;
 	return 1;
 }
 
