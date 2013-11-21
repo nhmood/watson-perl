@@ -664,8 +664,8 @@ sub parseConfig {
 			}
 			# Regex for dirs to ignore, then push to @IGNOREDIR
 
-			$line =~ m{\A\s* ((/?\w+/?)+) \s*\z}x
-				or die qq{The line "$line" is a "ignore" section did not contain a valid path};
+			$line =~ m{\A\s* (.+) \s*\z}x
+				or die qq{The line "$line" in a "ignore" section did not contain a valid path};
 			(my $path = $1) =~ s{(/)+\z}{};
 			debugPrint("ignore: $path added from rc.\n");
 			push @IGNORE, $path;
@@ -840,12 +840,6 @@ sub parseFile {
 
 	# Get filetype and set corresponding comment type
 	my $comment = getComment($file);
-	if (!$comment){
-		print box(BOLD MAGENTA "!");
-		print("--> ", RESET);
-		print("Couldn't determine filetype for $file, using # as comment\n", RESET);
-		$comment = "#";
-	}
 
 	# Open file and seek to beginning
 	open my $wf, "<", $file;
@@ -908,33 +902,23 @@ sub getComment {
 	# If unrecognized, try to grab next .something extension
 	# This is to account for file.cpp.1 or file.cpp.bak, ect
 
-	while ( (my $ext) = $file =~ m/(\.(\w+))$/){
+	my %exts;
+	$exts{$_} = qr{//} for qw/cpp cc c h c++/; # [todo] - add /* style comment
+	$exts{$_} = qr{#}  for qw/sh rb pl pm/;
+
+	my (undef, @extensions) = grep !/\s/, split /\./, $file;
+	for my $ext (@extensions) {
 		# Regex for last extension
 		debugPrint("Extension: $ext\n");
-
-		# Determine file type
-		# Not using switch/case for compatibility...
-
-		# C / C++
-		# [todo] - add /* style comment
-		if ( $ext eq ".cpp" || $ext eq ".cc" ||  $ext eq ".c" || $ext eq ".h"){
-			debugPrint("Comment type is: //\n");
-			return "//";
-		}
-		# Bash / Ruby / Perl
-		elsif ( $ext eq ".sh" || $ext eq ".rb" || $ext eq ".pl"){
-			debugPrint("Comment type is: #\n");
-			return "#";
-		}
-		# Can't recognize extension, keep looping
-		else {
-			$file =~ s/(\.(\w+))$//;
-			debugPrint("Didn't recognize, new file: $file\n");
-		}
+		return $exts{$ext} // next;
 	}
 
+	print box(BOLD MAGENTA "!");
+	print("--> ", RESET);
+	print("Couldn't determine filetype for $file, using # as comment\n", RESET);
+
 	# Didn't find any match, return error (and just use #)
-	return 0;
+	return qr{#};
 }
 
 
