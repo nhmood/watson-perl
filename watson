@@ -35,6 +35,7 @@
 
 use strict;
 use feature qw/say/;  # implies dependency on perl 5.10
+use autodie; # in Core since 5.10
 use warnings;
 
 # For color print outs
@@ -58,7 +59,6 @@ my $TMPOUT = ".watsonresults";	# Change tmp file name
 my @DIRS;
 my @FILES;
 my @TAGS;
-my %TAGS;
 my @IGNORE;
 my @STRUCTURE;
 my $REMOTESETUP = 0;
@@ -342,7 +342,7 @@ sub checkConfig {
 # Create default RC file with some generic settings
 sub createRC {
 	my ($file_name) = @_;
-	open my $file, "+>>", $file_name or die qq{Can't open "$file_name": $!};
+	open my $file, "+>>", $file_name;
 
 # [fixme] - Figure out a way to indent this?
 my $rcdefault = <<'EOF';
@@ -620,7 +620,7 @@ sub parseConfig {
 	# Parse rc
 	debugPrint("Parsing $RCNAME\n");
 
-	open my $rc, "<", $RCNAME or die qq{Can't open "$RCNAME": $!};
+	open my $rc, "<", $RCNAME;
 
 	# Add . and .. and .git to ignorelist
 	push @IGNORE, ".", "..", "*.swp", ".watsonrc", $TMPOUT;
@@ -781,7 +781,7 @@ sub parseDirs {
 	debugPrint(qq{Looping through all files/folders in "$dir"\n});
 
 	# Open dir and get list of all files
-	opendir my $wd, $dir or die qq{Can't open directory "$dir": $!};
+	opendir(my $wd, $dir);
 	ENTRY: for my $entry (sort grep !/\.\.?/, readdir $wd) {
 		# Combine dir and entry to make full path
 		my $path = "$dir/$entry";
@@ -836,86 +836,61 @@ sub parseFile {
 	debugPrint("parseFile: |$file|\n");
 
 	# Error check for input
-	if (!checkFile($file)){
-		return 0;
-	}
+	return unless checkFile($file);
 
 	# Get filetype and set corresponding comment type
 	my $comment = getComment($file);
 	if (!$comment){
-		print(BOLD "[ ", RESET);
-		print(BOLD MAGENTA "! ", RESET);
-		print(BOLD "] ", RESET);
+		print box(BOLD MAGENTA "!");
 		print("--> ", RESET);
 		print("Couldn't determine filetype for $file, using # as comment\n", RESET);
 		$comment = "#";
 	}
 
 	# Open file and seek to beginning
-	open(my $wf, "<", $file);
-	seek($wf, 0, 0);
+	open my $wf, "<", $file;
+	seek $wf, 0, 0;
 
-	# Initialize tag arrays so they are globally avaliable
-	foreach my $tag (@TAGS){
-	    debugPrint("Creating array named $tag \n");
-		$TAGS{$tag} = [];
-	}
+	my %issueList = (
+		filename => $file,
+		(map { $_ => [] } @TAGS),
+	);
 
 	# Read source file line by line
-	my $linecount = 0;
 	while (my $line = <$wf>){
-	    $linecount++;
 	    # Find any comment line with [tag] - text (any comb of space and #)
-	    if ($line =~ /\s*($comment)+\s*\[(\S+)\]\s*-\s*(.+)/) {
-			my $fissue = $3;
-			my $ftag = $2;
+	    if ($line =~ /\s*(?:$comment)+\s*\[(\S+)\]\s*-\s*(.+)/) {
+			my ($ftag, $fissue) = ($1, $2);
 			debugPrint("Issue found!\n");
 			debugPrint("Tag: $ftag\n");
 			debugPrint("Issue: $fissue\n");
 
-			foreach my $tag (@TAGS) {
-		    	if ($ftag eq $tag) {
-					# Create hash for each issue found (for each tag)
-					my $issue = {};
-					$issue->{linenumber} = $linecount;
-					$issue->{comment} = $fissue;
+			next unless exists $issueList{$ftag};
 
-					# Create hash for specific issue
-					my $digest = md5_hex($issue->{tag}, $issue->{file}, $issue->{comment});
-					debugPrint("$digest\n");
-					$issue->{md5} = $digest;
+			# Create hash for each issue found (for each tag)
+			my %issue = (
+				linenumber => $.,
+				comment => $fissue,
+				tag => $ftag,
+				file => $file,
+			);
 
-					push(@{$TAGS{$tag}}, $issue);
+			# Create hash for specific issue
+			my $digest = md5_hex(@issue{qw/tag file comment/});
+			debugPrint("$digest\n");
+			$issue{md5} = $digest;
 
-					# If Github valid, append file and tag, pass $issue to poster function
-					if ($GITHUB_VALID){
-						$issue->{file} = $file;
-						$issue->{tag} = $tag;
-						postGithub($issue);
-					}
+			push @{$issueList{$ftag}}, \%issue;
 
-					# If Bitbucket valid, append file and tag, pass $issue to poster function
-					if ($BITBUCKET_VALID){
-						$issue->{file} = $file;
-						$issue->{tag} = $tag;
-						postBitbucket($issue);
-					}
+			# If Github valid, pass $issue to poster function
+			postGithub(\%issue) if $GITHUB_VALID;
 
-		    	}
-			}
+			# If Bitbucket valid, pass $issue to poster function
+			postBitbucket(\%issue) if $BITBUCKET_VALID;
 	    }
 	}
 
-	#[fixme] - change name to issueList
-	my $issueList = {};
-	$issueList->{filename} = "$file";
-
-	# Toss on each tag found into the file's hash
-	foreach my $tag (@TAGS){
-	       	$issueList->{$tag} = [@{delete $TAGS{$tag}}];
-		debugPrint(Dumper($issueList));
-	}
-	return $issueList;
+	return \%issueList;
 }
 
 
