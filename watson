@@ -1728,8 +1728,10 @@ sub bitbucketSetup {
 	my $call;
 	my $response;
 
+    #bit bucket lowercases repo name. BobSmithRepo = bobsmithrepo
+    my $lcrepo = lc($repo);
 	$call = "curl -s -i " .
-			"https://bitbucket.org/api/1.0/repositories/$owner/$repo " .
+			"https://bitbucket.org/api/1.0/repositories/$owner/$lcrepo " .
 			"-u $username";
 	print BOLD;
 	$response = `$call`;
