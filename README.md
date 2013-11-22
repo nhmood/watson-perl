@@ -1,7 +1,7 @@
 # watson-perl  
 ### an inline issue manager
 [watson](http://goosecode.com/watson) ([mirror](http://nhmood.github.io/watson-perl)) is a tool for creating and tracking bug reports, issues, and internal notes in code.    
-It is avaliable in two flavors, [watson-ruby](http://github.com/nhmood/watson-ruby) and [watson-perl](http://github.com/watson-perl)
+It is avaliable in two flavors, [watson-ruby](http://github.com/nhmood/watson-ruby) and [watson-perl](http://github.com/nhmood/watson-perl)
 
 ### See watson in action [here](http://goosecode.com/watson) ([mirror](http://nhmood.github.io/watson-perl))
 
@@ -19,7 +19,7 @@ sudo chmod +x watson
 
 # OR Download watson to current directory with curl
 # and set watson to executable
-curl curl http://github.com/nhmood/watson-perl/watson-perl -o watson
+curl http://github.com/nhmood/watson-perl/watson-perl -o watson
 sudo chmod +x watson 
 
 # Copy watson to /usr/bin, which is most likely in your PATH

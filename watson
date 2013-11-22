@@ -49,7 +49,7 @@ use Data::Dumper;
 use Digest::MD5 qw(md5_hex);
 
 # App Config
-my $DEBUG = 0;
+my $DEBUG = $ENV{WATSON_DEBUG};
 my $RCNAME = ".watsonrc";		# Change config file name
 my $TMPOUT = ".watsonresults";	# Change tmp file name
 
