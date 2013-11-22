@@ -52,6 +52,8 @@ use Digest::MD5 qw(md5_hex);
 
 use JSON ();  # [todo] - list JSON as external dependency
 
+use File::Copy (); # in Core since 5.002
+
 # App Config
 my $DEBUG = $ENV{WATSON_DEBUG};
 my $RCNAME = ".watsonrc";		# Change config file name
@@ -1036,16 +1038,16 @@ sub githubSetup {
 	# Parse config to make sure no previous API exists
 	parseConfig() if checkConfig();
 
-	if ( ($GITHUB_API  ne "") || ($GITHUB_REPO ne "") ){
-		print box(BOLD RED "!");
-		print BOLD "Previous GitHub API + Repo is in RC, are you sure you want to overwrite?\n", RESET;
-		print "      (Y)es/(N)o: ";
-
-		chomp(my $overwrite = <STDIN>);
+	if ($GITHUB_API ne "" or $GITHUB_REPO ne "") {
+		my $overwrite = uc prompt(
+			{ default => "N" },
+			box(BOLD RED "!"),
+			BOLD "Previous GitHub API + Repo is in RC, are you sure you want to overwrite?\n", RESET,
+			"      (Y)es/(N)o: ",
+		);
 		print "\n";
 
-		if ($overwrite eq "" || uc($overwrite) eq "NO" ||
-			uc($overwrite) eq "N"){
+		if ($overwrite =~ /\A(?:NO?)?\z/){
 			print box(BOLD RED "x");
 			print BOLD "Not overwriting current GitHub API + repo info\n", RESET;
 			cExit(1);
@@ -1058,8 +1060,7 @@ sub githubSetup {
 
 	# Get username, clear newlines surrounding text
 	# If blank, give error
-	print BOLD "Username: ", RESET;
-	chomp(my $username = <STDIN>);
+	my $username = prompt(BOLD "Username: ", RESET);
 	if ($username eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
@@ -1083,24 +1084,21 @@ sub githubSetup {
 		JSON::parse_json($response);
 	};
 
-	if ($js->{"Status"} =~ m/201 Created/){
+	if ($js->{Status} =~ m/201 Created/){
 		print box(BOLD GREEN "o");
 		print BOLD "Obtained OAuth Token\n";
 	}
 	else {
 		print box(BOLD RED "x");
 		print BOLD "Unable to obtain OAuth Token\n", RESET;
-		#print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
 	}
 
 	print "\n", RESET;
 
-
-
 	# Set API key for use later so we don't have to parse config
 	# [reviewme] - Maybe we should just parse config?
-	$GITHUB_API = $js->{"token"};
+	$GITHUB_API = $js->{token};
 
 	# Get repo information
 	# If blank, give error
@@ -1110,17 +1108,13 @@ sub githubSetup {
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
 	print "      See help or README for more details on GitHub access\n\n";
 
-	print BOLD "Owner: ", RESET;
-	my $owner = <STDIN>;
-	chomp $owner;
+	my $owner = prompt(BOLD "Owner: ", RESET);
 	if ($owner eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
-	print BOLD "Repo: ", RESET;
-	my $repo = <STDIN>;
-	chomp $repo;
+	my $repo = prompt(BOLD "Repo: ", RESET);
 	if ($repo eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
@@ -1136,7 +1130,7 @@ sub githubSetup {
 	};
 	print "\n";
 
-	if ($js->{"Status"} =~ m/200 OK/){
+	if ($js->{Status} =~ m/200 OK/){
 		print box(BOLD GREEN "o");
 		print BOLD "Repo successfully accessed\n";
 	}
@@ -1165,23 +1159,20 @@ sub githubSetup {
 
 
 
-	if ($js->{"Status"} =~ m/201 Created/){
+	if ($js->{Status} =~ m/201 Created/){
 		print box(BOLD GREEN "o");
 		print BOLD "Label successfully created\n";
 	}
-	elsif ($js->{"code"} =~ m/already_exists/){
+	elsif ($js->{code} =~ m/already_exists/){
 		print box(BOLD YELLOW "!");
 		print BOLD "Label already exists\n";
 	}
 	else {
 		print box(BOLD RED "x");
 		print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
-		#print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
 	}
 	print "\n";
-
-
 
 	# Check if RC exists
 	# If it exists, basically replicate it and remove [github/bitbucket tag]
@@ -1189,8 +1180,8 @@ sub githubSetup {
 
 	if (checkConfig()){
 		debugPrint("Config exists, copying\n");
-		open(my $in, "<", "$RCNAME");
-		open(my $out, ">", "$RCNAME.new");
+		open my $in,  "<", $RCNAME;
+		open my $out, ">", "$RCNAME.new";
 		my $section = "";
 		while (my $line = <$in>){
 			debugPrint("$line\n");
@@ -1382,16 +1373,15 @@ sub bitbucketSetup {
 	parseConfig() if checkConfig();
 
 	if ( ($BITBUCKET_API  ne "") || ($BITBUCKET_REPO ne "") ){
-		print box(BOLD RED "!");
-		print BOLD "Previous Bitbucket Repo is in RC, are you sure you want to overwrite?\n", RESET;
-		print "      (Y)es/(N)o: ";
-
-		my $overwrite = <STDIN>;
-		chomp $overwrite;
+		my $overwrite = uc prompt(
+			{ default => 'N' },
+			box(BOLD RED "!"),
+			BOLD "Previous Bitbucket Repo is in RC, are you sure you want to overwrite?\n", RESET,
+			"      (Y)es/(N)o: "
+		);
 		print "\n";
 
-		if ($overwrite eq "" || uc($overwrite) eq "NO" ||
-			uc($overwrite) eq "N"){
+		if ($overwrite =~ /\A(?:NO?)?\z/) {
 			print box(BOLD RED "x");
 			print BOLD "Not overwriting current Bitbucket repo info\n", RESET;
 			cExit(1);
@@ -1410,18 +1400,14 @@ sub bitbucketSetup {
 
 	# Get username, clear newlines surrounding text
 	# If blank, give error
-	print BOLD "Username: ", RESET;
-	my $username = <STDIN>;
-	chomp $username;
-	if ($username eq ""){
+	my $username = prompt(BOLD "Username: ", RESET);
+	if ($username eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
 		cExit(1);
 	}
 
 	print "\n";
-	# cURL to get OAuth Token, returns JSON
-
 
 	# Get repo information
 	# If blank, give error
@@ -1432,18 +1418,14 @@ sub bitbucketSetup {
 	print "      See help or README for more details on GitHub access\n\n";
 
 
-	print BOLD "Owner: ", RESET;
-	my $owner = <STDIN>;
-	chomp $owner;
-	if ($owner eq ""){
+	my $owner = prompt(BOLD "Owner: ", RESET);
+	if ($owner eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
-	print BOLD "Repo: ", RESET;
-	my $repo = <STDIN>;
-	chomp $repo;
-	if ($repo eq ""){
+	my $repo = prompt(BOLD "Repo: ", RESET);
+	if ($repo eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
 		cExit(1);
@@ -1461,7 +1443,7 @@ sub bitbucketSetup {
 	$response = `$call`;
 	print "\n", RESET;
 	# [fixme] - Pretty bad way of doing this, either grep or improve parser
-	if ($response =~ m/HTTP\/1.1 200 OK/){
+	if ($response =~ m{HTTP/1.1 200 OK}) {
 		print box(BOLD GREEN "o");
 		print BOLD "Successfully accessed remote repo with given credentials\n";
 	}
@@ -1483,21 +1465,19 @@ sub bitbucketSetup {
 
 	if (checkConfig()){
 		debugPrint("Config exists, copying\n");
-		open(my $in, "<", "$RCNAME");
-		open(my $out, ">", "$RCNAME.new");
+		open my $in, "<", "$RCNAME";
+		open my $out, ">", "$RCNAME.new";
 		my $section = "";
 		while (my $line = <$in>){
+			chomp;
 			debugPrint("$line\n");
-			# Regex for section
-			if ($line =~ /^\[(\w+)\]/){
-			    $section = $1;
-			}
+			$section = lc $1 if $line =~ /^\[(\w+)\]/;
 
 
 			# Check for newlines
 			# If we already have 2 newlines before any actual content, skip
 			# This is just to make the RC file output nicer looking
-			if ($line eq "\n"){
+			if (not length $line){
 				debugPrint("Newline found\n");
 				if (++$nlc < 3){
 					debugPrint("Less than 3 newlines so far, let it print\n");
@@ -1506,10 +1486,7 @@ sub bitbucketSetup {
 			}
 			# If not in bitbucket or github section, safe to copy
 			# make $remotestr lowercase and check that + repo
-			elsif ( $section ne (lc("bitbucket"))  &&
-				    $section ne (lc("bitbucketrepo")) ){
-
-
+			elsif ($section ne "bitbucket"  and $section ne "bitbucketrepo"){
 				debugPrint("Not in bitbucket section, copying to new rc\n");
 				print $out $line;
 				# Reset newline count
@@ -1518,30 +1495,28 @@ sub bitbucketSetup {
 
 			debugPrint("line: $line");
 			debugPrint("nlc: $nlc\n");
-
-
 		}
 
 		# Remove old RC file and replace with new one
-		system("rm $RCNAME > /dev/null 2>&1");
-		system("cp $RCNAME.new $RCNAME > /dev/null 2>&1");
-		system("rm $RCNAME.new > /dev/null 2>&1");
+		File::Copy::move("$RCNAME.new" => $RCNAME) or warn qq{Could not update the RC file "$RCNAME": $!};
 	}
 
 	# Append API token to end of file (old or new, doesn't matter now)
-	open(my $file, "+>>", "$RCNAME");
+	open my $file, "+>>", $RCNAME;
 
 	# Make sure there are only 2 newlines between items in RC
 	print $file "\n" for $nlc .. 1;
 
 	# Store username in bitbucket api section since we don't OAuth yet
-	print $file "[bitbucket]\n";
-	print $file "$username\n";
-	print $file "\n\n";
-	print $file "[bitbucketrepo]\n";
-	print $file "$owner/$repo";
-	print $file "\n";
-	close($file);
+	say $file $_ for
+		"[bitbucket]",
+		$username,
+		"",
+		"",
+		"[bitbucketrepo]",
+		"$owner/$repo",
+		"";
+	close $file;
 
 	print box(BOLD GREEN "o");
 	print BOLD "Bitbucket successfully setup\n", RESET;
@@ -1560,24 +1535,23 @@ sub bitbucketSetup {
 # Post issues to github/bitbucket
 sub getBitbucketIssues {
 	# Only attempt if repo is specified
-	if (length($BITBUCKET_REPO) != 0){
+	if (length $BITBUCKET_REPO){
 		debugPrint("Getting Bitbucket Issues\n");
 
-		print BOLD "Bitbucket password required for remote checking/posting: ", RESET;
-		system("stty -echo");
-		my $pw = <STDIN>;
-		chomp $pw;
-		system("stty echo");
+		my $pw = prompt(
+			{ echo => 0 },
+			BOLD "Bitbucket password required for remote checking/posting: ", RESET,
+		);
 		print "\n";
-		if ($pw eq ""){
+		if (length $pw) {
+			$BITBUCKET_PW = $pw;
+		}
+		else {
 			print box(BOLD RED "x");
 			print BOLD "Input blank. Will not check/update against Bitbucket\n", RESET;
 			$BITBUCKET_PW = "";
 			$BITBUCKET_VALID = 0;
 			return 1;
-		}
-		else {
-			$BITBUCKET_PW = $pw;
 		}
 
 		# Get all issues, Bitbucket differentiates between open/new so we can just look for all
@@ -1622,15 +1596,14 @@ sub getBitbucketIssues {
 sub postBitbucket {
 	my ($issue) = @_;
 	# Bitbucket API has been registered, post on Github
-	if (length($BITBUCKET_API) != 0){
+	if (length $BITBUCKET_API) {
 		# Check if md5 of issue has already been posted
 		# [fixme] - if issue with same name in same file is made, won't ever get posted again :-/
-		if ($BITBUCKET_OPEN_ISSUES !~ m/$issue->{md5}/ && $BITBUCKET_CLOSED_ISSUES !~ m/$issue->{md5}/){
+		if ($BITBUCKET_OPEN_ISSUES !~ m/$issue->{md5}/ and $BITBUCKET_CLOSED_ISSUES !~ m/$issue->{md5}/) {
 			# Format title and body for creating issue
 			# Title format: comment [basename of file], escape any '
-			my $title = $issue->{file};
-			$title =~ s/^(.+)\///;
-			$title = "$issue->{comment} [" . $title . "]";
+			(my $filename = $issue->{file}) =~ s{\A.+/}{};
+			my $title = "$issue->{comment} [$filename]";
 			# [fixme] - Figure out how to escape ' character on JSON post
 			# Remove ' for now
 			$title =~ s/\'//;
@@ -1670,6 +1643,27 @@ sub postBitbucket {
 sub box {
 	my $content = join '', @_;
 	return BOLD, "[ ", RESET, $content, RESET, BOLD, " ] ", RESET;
+}
+
+#########
+# prompt
+#########
+
+sub prompt {
+	my %config = (
+		out => select(),
+		in	=> \*STDIN,
+		echo => 1,
+		('HASH' eq ref $_[0])  ? %{ shift @_ } :
+		('HASH' eq ref $_[-1]) ? %{ pop   @_ } :
+		(),
+	);
+	print {$config{out}} @_;
+	system 'stty', '-echo' unless $config{echo};
+	chomp(my $answer = readline $config{in});
+	system 'stty', 'echo'  unless $config{echo};
+	return $config{default} if exists $config{default} and not length $answer;
+	return $answer;
 }
 
 # kate: space-indent off; indent-width 4; mixedindent off; indent-mode cstyle;
