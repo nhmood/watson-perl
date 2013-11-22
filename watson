@@ -907,7 +907,7 @@ sub getComment {
 	$exts{$_} = qr{#}  for qw/sh rb pl pm/;
 
 	my (undef, @extensions) = grep !/\s/, split /\./, $file;
-	for my $ext (@extensions) {
+	for my $ext (reverse @extensions) {
 		# Regex for last extension
 		debugPrint("Extension: $ext\n");
 		return $exts{$ext} // next;
@@ -929,7 +929,7 @@ sub getComment {
 # Format the parsed file data and output it nicely
 sub createReport {
 	# Display output for each file parsed
-	foreach my $entry (@STRUCTURE){
+	for my $entry (@STRUCTURE){
 		printResults($entry);
 	}
 
@@ -950,76 +950,50 @@ sub createReport {
 sub printResults {
 	my ($entry) = @_;
 	# Go through and print info for all files first
-	for (my $i = 0; $i < scalar( @{$entry->{files}}); $i++){
+	for my $file_report (@{$entry->{files}}) {
 
 		# [fixme] - Same foreach performed below, combine somehow?
 
 		# Go through and see if there are any issues with given file
 		# Sets print color and whether to continue to print
-		my $issueflag = 0;
-		foreach my $tag (@TAGS){
-			if (scalar( @{$entry->{files}[$i]->{$tag}})){
-				$issueflag++;
-			}
-		}
+		my $issueflag = grep { 0+@{$file_report->{$_}} } @TAGS;
 
 		if ($issueflag){
 			wprint("\n");
-			wprint(BOLD "[ ", RESET);
-			wprint(BOLD RED "x ", RESET);
-			wprint(BOLD "] ", RESET);
-			wprint(UNDERLINE BOLD RED "$entry->{files}[$i]->{filename}", RESET);
+			wprint(box(BOLD RED "x"));
+			wprint(UNDERLINE BOLD RED $file_report->{filename}, RESET);
 		}
 		else {
-			wprint(BOLD "[ ", RESET);
-			wprint(BOLD GREEN "o ", RESET);
-			wprint(BOLD "] ", RESET);
-			wprint(UNDERLINE BOLD GREEN "$entry->{files}[$i]->{filename}", RESET);
+			wprint(box(BOLD GREEN "o"));
+			wprint(UNDERLINE BOLD GREEN $file_report->{filename}, RESET);
 		}
 
 		wprint("\n");
 
 		# If there are no issues, don't print anything (go to next file)
 		# Else, continue on and print the issues
-		($issueflag > 0) ? (1) : (next);
+		next unless $issueflag;
 
 		# Cycle through all tags and print issues for each
-		foreach my $tag (@TAGS){
-
-			# If no issues in tag, don't print
-			if (!scalar( @{$entry->{files}[$i]->{$tag}})){
-				next;
-			}
+		for my $tag (@TAGS){
+			my @issues = @{$file_report->{$tag}} or next;
 
 			# Print tag, line #, and issue
-			wprint(BOLD  "\[ ", RESET);
-			wprint(BOLD BLUE "$tag", RESET);
-			wprint(BOLD  " \]\n", RESET);
+			wprint(box(BOLD BLUE $tag), "\n");
 
-
-
-			for (my $j = 0; $j < scalar( @{$entry->{files}[$i]->{$tag}}); $j++){
-				wprint(WHITE "  line $entry->{files}[$i]->{$tag}[$j]->{linenumber} - ", RESET);
-				wprint(BOLD "$entry->{files}[$i]->{$tag}[$j]->{comment} ", RESET);
+			for my $issue (@issues) {
+				wprint(WHITE "  line $issue->{linenumber} - ", RESET);
+				wprint(BOLD "$issue->{comment} ", RESET);
 
 				# If valid API key
 				# Check if issue has been closed on Github or Bitbucket, set to resolved
-				if ( ($GITHUB_VALID) ){
-					if ( ($GITHUB_CLOSED_ISSUES =~ m/$entry->{files}[$i]->{$tag}[$j]->{md5}/) ) {
-						wprint(BOLD "\[", RESET);
-						wprint(BOLD GREEN "Resolved on GitHub", RESET);
-						wprint(BOLD "\]");
-					}
-				}
+				wprint(box(BOLD GREEN "Resolved on GitHub"))
+					if	$GITHUB_VALID
+					and	$GITHUB_CLOSED_ISSUES =~ m/$issue->{md5}/;
 
-
-				if ( ($BITBUCKET_VALID) ){
-					if ( ($BITBUCKET_CLOSED_ISSUES =~ m/$entry->{files}[$i]->{$tag}[$j]->{md5}/) ){
-						wprint(BOLD "\[", RESET);
-						wprint(BOLD GREEN "Resolved on Bitbucket", RESET);
-						wprint(BOLD "\]");
-					}
-				}
+				wprint(box(BOLD GREEN "Resolved on Bitbucket"))
+					if 	$BITBUCKET_VALID
+					and	$BITBUCKET_CLOSED_ISSUES =~ m/$issue->{md5}/;
 
 				wprint("\n");
 			}
@@ -1027,9 +1001,8 @@ sub printResults {
 		}
 	}
 
-	for (my $i = 0; $i < scalar( @{$entry->{dirs}}); $i++){
-		printResults($entry->{dirs}[$i]);
-	}
+	printResults($_) for @{$entry->{dirs}};
+
 	return 1;
 }
 
@@ -1804,7 +1777,7 @@ sub postBitbucket {
 
 sub box {
 	my $content = join '', @_;
-	return BOLD, "[ ", RESET, $content, RESET, BOLD, " ]", RESET;
+	return BOLD, "[ ", RESET, $content, RESET, BOLD, " ] ", RESET;
 }
 
 # kate: space-indent off; indent-width 4; mixedindent off; indent-mode cstyle;
