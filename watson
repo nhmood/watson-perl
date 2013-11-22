@@ -775,7 +775,7 @@ sub parseDirs {
 	my ($dir, $depth) = @_;
 	$depth //= 1;
 	return if $MAX_DEPTH and $depth > $MAX_DEPTH;
-	debugPrint("parseDirs: |$dir| at depth $depth\n");
+	debugPrint("parseDirs: |$dir| at depth $depth/$MAX_DEPTH\n");
 	return unless checkDir($dir); # Error check for input
 
 	my @pdirs;		# subdirectories found
@@ -786,7 +786,7 @@ sub parseDirs {
 
 	# Open dir and get list of all files
 	opendir(my $wd, $dir);
-	ENTRY: for my $entry (sort grep !/\.\.?/, readdir $wd) {
+	ENTRY: for my $entry (sort grep !/\A\.\.?\z/, readdir $wd) {
 		# Combine dir and entry to make full path
 		my $path = "$dir/$entry";
 
