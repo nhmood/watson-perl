@@ -1015,6 +1015,9 @@ sub printResults {
 sub parseJSON {
 	my ($json) = @_;
 
+	# [fixme] - fix this fucked up JSON parser abomination
+	...; # die unimplemented
+
 	debugPrint("JSON Parser");
 
 	# Clean up text, separate with : delimiter
@@ -1065,9 +1068,7 @@ sub githubSetup {
 	print(BOLD "------------------------------\n\n");
 
 	# [fixme] - Make modular status printer?
-	print BOLD "[ ", RESET;
-	print BOLD GREEN "+ ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD GREEN "+");
 	print BOLD "Obtaining OAuth Token for GitHub...\n", RESET;
 
 	# Parse config to make sure no previous API exists
@@ -1075,9 +1076,7 @@ sub githubSetup {
 
 	if ( ($GITHUB_API  ne "") ||
 		 ($GITHUB_REPO ne "") ){
-		print BOLD "[ ", RESET;
-		print BOLD RED "! ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "!");
 		print BOLD "Previous GitHub API + Repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
@@ -1087,20 +1086,14 @@ sub githubSetup {
 
 		if ($overwrite eq "" || uc($overwrite) eq "NO" ||
 			uc($overwrite) eq "N"){
-			print BOLD "[ ", RESET;
-			print BOLD RED "x ", RESET;
-			print BOLD "] ", RESET;
+			print box(BOLD RED "x");
 			print BOLD "Not overwriting current GitHub API + repo info\n", RESET;
 			cExit(1);
 		}
 	}
 
-
-	print BOLD "[ ", RESET;
-	print BOLD YELLOW "! ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD YELLOW "!");
 	print BOLD "Access to your GitHub account required to make/update issues\n", RESET;
-
 	print "      See help or README for more details on GitHub/Bitbucket access\n\n";
 
 	# Get username, clear newlines surrounding text
@@ -1109,9 +1102,7 @@ sub githubSetup {
 	my $username = <STDIN>;
 	chomp $username;
 	if ($username eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
 		cExit(1);
 	}
@@ -1135,15 +1126,11 @@ sub githubSetup {
 	};
 
 	if ($js->{"Status"} =~ m/201 Created/){
-		print BOLD "[ ", RESET;
-		print BOLD GREEN "o ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD GREEN "o");
 		print BOLD "Obtained OAuth Token\n";
 	}
 	else {
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Unable to obtain OAuth Token\n", RESET;
 		#print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
@@ -1159,9 +1146,7 @@ sub githubSetup {
 
 	# Get repo information
 	# If blank, give error
-	print BOLD "[ ", RESET;
-	print BOLD YELLOW "! ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD YELLOW "!");
 	print BOLD "Repo information required\n", RESET;
 	print "      Please provide owner that repo is under followed by repo name\n";
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
@@ -1171,9 +1156,7 @@ sub githubSetup {
 	my $owner = <STDIN>;
 	chomp $owner;
 	if ($owner eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
@@ -1181,9 +1164,7 @@ sub githubSetup {
 	my $repo = <STDIN>;
 	chomp $repo;
 	if ($repo eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
 		cExit(1);
 	}
@@ -1198,15 +1179,11 @@ sub githubSetup {
 	print "\n";
 
 	if ($js->{"Status"} =~ m/200 OK/){
-		print BOLD "[ ", RESET;
-		print BOLD GREEN "o ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD GREEN "o");
 		print BOLD "Repo successfully accessed\n";
 	}
 	else {
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
 		#print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
@@ -1215,9 +1192,7 @@ sub githubSetup {
 
 
 	# [fixme] - Make modular status printer?
-	print BOLD "[ ", RESET;
-	print BOLD GREEN "+ ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD RED "x");
 	print BOLD "Creating label for watson on GitHub...\n", RESET;
 
 	# Create label for watson
@@ -1233,21 +1208,15 @@ sub githubSetup {
 
 
 	if ($js->{"Status"} =~ m/201 Created/){
-		print BOLD "[ ", RESET;
-		print BOLD GREEN "o ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD GREEN "o");
 		print BOLD "Label successfully created\n";
 	}
 	elsif ($js->{"code"} =~ m/already_exists/){
-		print BOLD "[ ", RESET;
-		print BOLD YELLOW "! ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD YELLOW "!");
 		print BOLD "Label already exists\n";
 	}
 	else {
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
 		#print "      Status: ", $js->{"Status"}, "\n";
 		cExit(1);
@@ -1321,10 +1290,7 @@ sub githubSetup {
 	close($file);
 
 
-
-	print BOLD "[ ", RESET;
-	print BOLD GREEN "o ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD GREEN "o");
 	print BOLD "GitHub successfully setup\n", RESET;
 	print "      Issues will now automatically be updated on GitHub by default\n";
 	#print "      Use -l, --local to not update against GitHub\n";
@@ -1354,9 +1320,7 @@ sub getGithubIssues {
 		# Set GITHUB_VALID to 0 so that no remote related calls will be made
 		if ($GITHUB_OPEN_ISSUES !~ m/200 OK/){
 			$GITHUB_VALID = 0;
-			wprint(BOLD "[ ", RESET);
-			wprint(BOLD RED "x ", RESET);
-			wprint(BOLD "] ", RESET);
+			print box(BOLD RED "x");
 			wprint("--> ", RESET);
 			wprint(BOLD "Unable to access remote, GitHub API may be invalid\n");
 			wprint(BOLD "          Consider running --remote (-r) option to regenerate key\n\n", RESET);
@@ -1453,19 +1417,14 @@ sub bitbucketSetup {
 	print(BOLD "------------------------------\n\n");
 
 	# [fixme] - Make modular status printer?
-	print BOLD "[ ", RESET;
-	print BOLD GREEN "+ ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD GREEN "+");
 	print BOLD "Attempting to access Bitbucket...\n", RESET;;
 
 	# Parse config to make sure no previous API exists
 	parseConfig() if checkConfig();
 
-	if ( ($BITBUCKET_API  ne "") ||
-	     ($BITBUCKET_REPO ne "") ){
-		print BOLD "[ ", RESET;
-		print BOLD RED "! ", RESET;
-		print BOLD "] ", RESET;
+	if ( ($BITBUCKET_API  ne "") || ($BITBUCKET_REPO ne "") ){
+		print box(BOLD RED "!");
 		print BOLD "Previous Bitbucket Repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
@@ -1475,25 +1434,18 @@ sub bitbucketSetup {
 
 		if ($overwrite eq "" || uc($overwrite) eq "NO" ||
 			uc($overwrite) eq "N"){
-			print BOLD "[ ", RESET;
-			print BOLD RED "x ", RESET;
-			print BOLD "] ", RESET;
+			print box(BOLD RED "x");
 			print BOLD "Not overwriting current Bitbucket repo info\n", RESET;
 			cExit(1);
 		}
 	}
 
-
-	print BOLD "[ ", RESET;
-	print BOLD YELLOW "! ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD YELLOW "!");
 	print BOLD "Access to your Bitbucket account required to make/update issues\n", RESET;
 
 	print "      See help or README for more details on GitHub/Bitbucket access\n\n";
 
-	print BOLD "[ ";
-	print BOLD RED "! ", RESET;
-	print BOLD "]", RESET;
+	print box(BOLD RED "!");
 	print BOLD " Bitbucket OAuth not implemented yet.\n", RESET;
 	print "      Basic HTTP Auth in use, will request PW entry every time.\n\n";
 
@@ -1504,9 +1456,7 @@ sub bitbucketSetup {
 	my $username = <STDIN>;
 	chomp $username;
 	if ($username eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
 		cExit(1);
 	}
@@ -1517,9 +1467,7 @@ sub bitbucketSetup {
 
 	# Get repo information
 	# If blank, give error
-	print BOLD "[ ", RESET;
-	print BOLD YELLOW "! ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD YELLOW "!");
 	print BOLD "Repo information required\n", RESET;
 	print "      Please provide owner that repo is under followed by repo name\n";
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
@@ -1530,9 +1478,7 @@ sub bitbucketSetup {
 	my $owner = <STDIN>;
 	chomp $owner;
 	if ($owner eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
@@ -1540,9 +1486,7 @@ sub bitbucketSetup {
 	my $repo = <STDIN>;
 	chomp $repo;
 	if ($repo eq ""){
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
 		cExit(1);
 	}
@@ -1560,15 +1504,11 @@ sub bitbucketSetup {
 	print "\n", RESET;
 	# [fixme] - Pretty bad way of doing this, either grep or improve parser
 	if ($response =~ m/HTTP\/1.1 200 OK/){
-		print BOLD "[ ", RESET;
-		print BOLD GREEN "o ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD GREEN "o");
 		print BOLD "Successfully accessed remote repo with given credentials\n";
 	}
 	else {
-		print BOLD "[ ", RESET;
-		print BOLD RED "x ", RESET;
-		print BOLD "] ", RESET;
+		print box(BOLD RED "x");
 		print BOLD "Unable to access remote repo with given credentials\n", RESET;
 		print BOLD "Check that credentials are correct and repository exists under owner\n", RESET;
 		#print "      Status: ", $js->{"Status"}, "\n";
@@ -1645,9 +1585,7 @@ sub bitbucketSetup {
 	print $file "\n";
 	close($file);
 
-	print BOLD "[ ", RESET;
-	print BOLD GREEN "o ", RESET;
-	print BOLD "] ", RESET;
+	print box(BOLD GREEN "o");
 	print BOLD "Bitbucket successfully setup\n", RESET;
 	print "      Issues will now automatically be updated on Bitbucket by default\n";
 	print "      Use -l, --local to not update against GitHub\n";
@@ -1674,9 +1612,7 @@ sub getBitbucketIssues {
 		system("stty echo");
 		print "\n";
 		if ($pw eq ""){
-			print BOLD "[ ", RESET;
-			print BOLD RED "x ", RESET;
-			print BOLD "] ", RESET;
+			print box(BOLD RED "x");
 			print BOLD "Input blank. Will not check/update against Bitbucket\n", RESET;
 			$BITBUCKET_PW = "";
 			$BITBUCKET_VALID = 0;
@@ -1698,9 +1634,7 @@ sub getBitbucketIssues {
 		# Check for a Status
 		if ($BITBUCKET_OPEN_ISSUES !~ m/HTTP\/1.1 200 OK/){
 			$BITBUCKET_VALID = 0;
-			wprint(BOLD "[ ", RESET);
-			wprint(BOLD RED "x ", RESET);
-			wprint(BOLD "] ", RESET);
+			print box(BOLD RED "x");
 			wprint("--> ", RESET);
 			wprint(BOLD "Unable to access remote, Bitbucket settings may be invalid\n");
 			wprint(BOLD "          Consider running --remote (-r) option to regenerate settings\n\n", RESET);
