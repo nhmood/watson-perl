@@ -50,6 +50,8 @@ use Data::Dumper;
 # For MD5 Sum (issue posting check)
 use Digest::MD5 qw(md5_hex);
 
+use JSON ();  # [todo] - list JSON as external dependency
+
 # App Config
 my $DEBUG = $ENV{WATSON_DEBUG};
 my $RCNAME = ".watsonrc";		# Change config file name
@@ -1008,46 +1010,6 @@ sub printResults {
 
 
 ###########################################################
-# JSON Parser
-###########################################################
-
-# Parse JSON response from github/bitbucket issue requests
-sub parseJSON {
-	my ($json) = @_;
-
-	# [fixme] - fix this fucked up JSON parser abomination
-	...; # die unimplemented
-
-	debugPrint("JSON Parser");
-
-	# Clean up text, separate with : delimiter
-	# Throw data into hash
-	my $js = {};
-	my @lines = split /\n/, $json;
-	foreach my $line (@lines){
-		my $ind = index($line, ":");
-		if ($ind != -1){
-			my $field = substr($line, 0, $ind);
-			my $value = substr($line, $ind + 1);
-			if ($value ne "{" || $value ne "["){
-				# Remove trailing spaces, }, ], ,s and all ""
-				$field =~ s/^(\s+)}?]?//g;
-				$field =~ s/\"?,?//g;
-
-				$value =~ s/^(\s+)\{?\[?//g;
-				$value =~ s/\"?,?//g;
-
-				debugPrint("field: $field\n");
-				debugPrint("value: $value\n");
-				$js->{$field} = $value;
-			}
-		}
-	}
-	return $js;
-}
-
-
-###########################################################
 # GitHub Setup
 ###########################################################
 
@@ -1074,14 +1036,12 @@ sub githubSetup {
 	# Parse config to make sure no previous API exists
 	parseConfig() if checkConfig();
 
-	if ( ($GITHUB_API  ne "") ||
-		 ($GITHUB_REPO ne "") ){
+	if ( ($GITHUB_API  ne "") || ($GITHUB_REPO ne "") ){
 		print box(BOLD RED "!");
 		print BOLD "Previous GitHub API + Repo is in RC, are you sure you want to overwrite?\n", RESET;
 		print "      (Y)es/(N)o: ";
 
-		my $overwrite = <STDIN>;
-		chomp $overwrite;
+		chomp(my $overwrite = <STDIN>);
 		print "\n";
 
 		if ($overwrite eq "" || uc($overwrite) eq "NO" ||
@@ -1099,8 +1059,7 @@ sub githubSetup {
 	# Get username, clear newlines surrounding text
 	# If blank, give error
 	print BOLD "Username: ", RESET;
-	my $username = <STDIN>;
-	chomp $username;
+	chomp(my $username = <STDIN>);
 	if ($username eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
@@ -1121,8 +1080,7 @@ sub githubSetup {
 		my $response = `$call`;
 		print "\n", RESET;
 
-		# [fixme] - Pretty bad way of doing this, either grep or improve parser
-		parseJSON($response);
+		JSON::parse_json($response);
 	};
 
 	if ($js->{"Status"} =~ m/201 Created/){
@@ -1174,7 +1132,7 @@ sub githubSetup {
 				"-H 'Authorization: token $GITHUB_API' " .
 				"https://api.github.com/repos/$owner/$repo/issues";
 		my $response = `$call`;
-		$js = parseJSON($response);
+		$js = JSON::parse_json($response);
 	};
 	print "\n";
 
@@ -1203,7 +1161,7 @@ sub githubSetup {
 		       		"\"name\" : \"watson\"," .
 		       		"\"color\" : \"00AEEF\" }'";
 	my $response = `$call`;
-	$js = parseJSON($response);
+	$js = JSON::parse_json($response);
 
 
 
