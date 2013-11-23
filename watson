@@ -1050,9 +1050,9 @@ sub getComment {
 		# Determine file type
 		# Not using switch/case for compatibility...
 		
-		# C / C++
+		# C / C++ / Objective-C
 		# [todo] - add /* style comment
-		if ( $ext eq ".cpp" || $ext eq ".cc" ||  $ext eq ".c" || $ext eq ".h"){
+		if ( $ext eq ".cpp" || $ext eq ".cc" ||  $ext eq ".c" || $ext eq ".h" || $ext eq ".m" ){
 			debugPrint("Comment type is: //\n");
 			return "//";
 		}
