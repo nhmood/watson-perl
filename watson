@@ -1056,8 +1056,8 @@ sub getComment {
 			debugPrint("Comment type is: //\n");
 			return "//";
 		}
-		# Bash / Ruby / Perl	
-		elsif ( $ext eq ".sh" || $ext eq ".rb" || $ext eq ".pl"){
+		# Bash / Zsh / Ruby / Perl / Perl test file	
+		elsif ( $ext eq ".sh" || $ext eq ".zsh" || $ext eq ".rb" || $ext eq ".pl" || $ext eq ".t"){
 			debugPrint("Comment type is: #\n");
 			return "#";
 		}
