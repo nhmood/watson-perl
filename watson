@@ -908,8 +908,12 @@ sub getComment {
 	# This is to account for file.cpp.1 or file.cpp.bak, ect
 
 	my %exts;
-	$exts{$_} = qr{//} for qw/cpp cc c h c++/; # [todo] - add /* style comment
-	$exts{$_} = qr{#}  for qw/sh rb pl pm/;
+	$exts{$_} = qr{//} for qw/cpp cc c h c++ m mm java class cs js php go scala/; # [todo] - add /* style comment
+	$exts{$_} = qr{#}  for qw/sh rb pl pm py coffee/;
+	$exts{$_} = qr{--}  for qw/hs/;
+	$exts{$_} = qr{%}  for qw/erl/;
+	$exts{$_} = qr{;;}  for qw/clj/;
+	$exts{$_} = qr{<!--}  for qw/html htm css/;
 
 	my (undef, @extensions) = grep !/\s/, split /\./, $file;
 	for my $ext (reverse @extensions) {
