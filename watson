@@ -50,7 +50,8 @@ use Data::Dumper;
 # For MD5 Sum (issue posting check)
 use Digest::MD5 qw(md5_hex);
 
-use JSON ();  # [todo] - list JSON as external dependency
+# For proper JSON parsing
+use JSON::PP;
 
 use File::Copy (); # in Core since 5.002
 
@@ -1067,39 +1068,39 @@ sub githubSetup {
 	}
 
 	# cURL to get OAuth Token, returns JSON
-
 	$js = do {
 		my $call = "curl -s -i " .
 				"https://api.github.com/authorizations " .
 				"-u $username " .
 				"-d '{\"scopes\": [\"repo\"], " .
 					"\"note\": \"watson\", " .
-					"\"note_url\" : \"http://watson.goosecode.com\"}' ";
+					"\"note_url\" : \"http://goosecode.com/watson\"}' ";
 
-		print BOLD;
 		my $response = `$call`;
-		print "\n", RESET;
 
-		JSON::parse_json($response);
+    # We use headers for determining HTTP call status
+    if ($response =~ m{201 Created}){
+      print box(BOLD GREEN "o");
+      print BOLD "Obtained OAuth Token\n";
+    }
+    else {
+      print box(BOLD RED "x");
+      print BOLD "Unable to obtain OAuth Token\n", RESET;
+      cExit(1);
+    }
+   
+    my @splits = split /X-GitHub-Request-Id:.+/, $response;
+		decode_json($splits[1]);
 	};
 
-	if ($js->{Status} =~ m/201 Created/){
-		print box(BOLD GREEN "o");
-		print BOLD "Obtained OAuth Token\n";
-	}
-	else {
-		print box(BOLD RED "x");
-		print BOLD "Unable to obtain OAuth Token\n", RESET;
-		cExit(1);
-	}
 
 	print "\n", RESET;
-
-	# Set API key for use later so we don't have to parse config
+	
+  # Set API key for use later so we don't have to parse config
 	# [reviewme] - Maybe we should just parse config?
 	$GITHUB_API = $js->{token};
-
-	# Get repo information
+	
+  # Get repo information
 	# If blank, give error
 	print box(BOLD YELLOW "!");
 	print BOLD "Repo information required\n", RESET;
@@ -1120,57 +1121,70 @@ sub githubSetup {
 		cExit(1);
 	}
 
+
+  # Check if user has access to specified repo
 	$js = do {
 		my $call = "curl -s -i " .
 				"-H 'Authorization: token $GITHUB_API' " .
 				"https://api.github.com/repos/$owner/$repo/issues";
+
 		my $response = `$call`;
-		$js = JSON::parse_json($response);
+
+    # We use headers for determining HTTP call status
+    if ($response =~ m{200 OK}){
+      print box(BOLD GREEN "o");
+		  print BOLD "Repo successfully accessed\n";
+    }
+    else {
+      print box(BOLD RED "x");
+		  print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
+      cExit(1);
+    }
+
+    my @splits = split /Vary: Accept-Encoding/, $response;
+		decode_json($splits[1]);
 	};
+
 	print "\n";
 
-	if ($js->{Status} =~ m/200 OK/){
-		print box(BOLD GREEN "o");
-		print BOLD "Repo successfully accessed\n";
-	}
-	else {
-		print box(BOLD RED "x");
-		print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
-		#print "      Status: ", $js->{"Status"}, "\n";
-		cExit(1);
-	}
-	print "\n";
-
-
-	# [fixme] - Make modular status printer?
-	print box(BOLD RED "x");
+  # Create label for watson	
+  print box(BOLD GREEN "+");
 	print BOLD "Creating label for watson on GitHub...\n", RESET;
 
 	# Create label for watson
+	$js = do {
 	my $call = "curl -s -i " .
 		       "-H 'Authorization: token $GITHUB_API' " .
 		       "https://api.github.com/repos/$owner/$repo/labels " .
 		       "-d '{" .
 		       		"\"name\" : \"watson\"," .
 		       		"\"color\" : \"00AEEF\" }'";
-	my $response = `$call`;
-	$js = JSON::parse_json($response);
 
+		my $response = `$call`;
 
+    # We use headers for determining HTTP call status
+    if ($response =~ m{201 Created}){
+      print box(BOLD GREEN "o");
+		  print BOLD "Label successfully created\n";
+    }
+	  elsif ($response =~ m{already_exists}){
+		  print box(BOLD YELLOW "!");
+		  print BOLD "Label already exists\n";
+      cExit(1);
+    }
+    else {
+		  print box(BOLD RED "x");
+		  print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
+      print "      Check that credentials are correct and repository exists under user\n";
+		  cExit(1);
+    }
+    print $response;
+    cExit(1);
 
-	if ($js->{Status} =~ m/201 Created/){
-		print box(BOLD GREEN "o");
-		print BOLD "Label successfully created\n";
-	}
-	elsif ($js->{code} =~ m/already_exists/){
-		print box(BOLD YELLOW "!");
-		print BOLD "Label already exists\n";
-	}
-	else {
-		print box(BOLD RED "x");
-		print BOLD "Unable to access /repo/$owner/$repo\n", RESET;
-		cExit(1);
-	}
+    my @splits = split /Vary: Accept-Encoding/, $response;
+		decode_json($splits[1]);
+	};
+
 	print "\n";
 
 	# Check if RC exists
@@ -1432,31 +1446,31 @@ sub bitbucketSetup {
 
 	print "\n";
 
-	my $call;
-	my $response;
-
-	$call = "curl -s -i " .
+	# cURL to get OAuth Token, returns JSON
+	$js = do {
+	  my $call = "curl -s -i " .
 			"https://bitbucket.org/api/1.0/repositories/$owner/$repo " .
 			"-u $username";
-	print BOLD;
-	$response = `$call`;
-	print "\n", RESET;
-	# [fixme] - Pretty bad way of doing this, either grep or improve parser
-	if ($response =~ m{HTTP/1.1 200 OK}) {
-		print box(BOLD GREEN "o");
-		print BOLD "Successfully accessed remote repo with given credentials\n";
-	}
-	else {
-		print box(BOLD RED "x");
-		print BOLD "Unable to access remote repo with given credentials\n", RESET;
-		print BOLD "Check that credentials are correct and repository exists under owner\n", RESET;
-		#print "      Status: ", $js->{"Status"}, "\n";
-		cExit(1);
-	}
 
-	print "\n", RESET;
+		my $response = `$call`;
 
+    # We use headers for determining HTTP call status
+    if ($response =~ m{HTTP/1.1 200 OK}){
+      print box(BOLD GREEN "o");
+		  print BOLD "Successfully accessed remote repo with given credentials\n";
+    }
+    else {
+      print box(BOLD RED "x");
+		  print BOLD "      Unable to access remote repo with given credentials\n", RESET;
+		  print BOLD "      Check that credentials are correct and repository exists under owner\n", RESET;
+      cExit(1);
+    }
+ 
+    my @splits = split /X-Content-Type-Options:.+/, $response;
+		decode_json($splits[1]);
+	};
 
+  print "\n", RESET;
 
 	# Check if RC exists
 	# If it exists, basically replicate it and remove [github/bitbucket tag]
