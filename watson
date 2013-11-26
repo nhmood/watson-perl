@@ -193,7 +193,7 @@ END_VERSION
 sub cExit {
 	my ($exit_status) = @_;
 
-	unlink $TMPOUT or warn "Could not remove $TMPOUT: $!";
+	unlink $TMPOUT or warn "Could not remove $TMPOUT: $!" if (-e $TMPOUT);
 
 	# If exit status is INT(terupt), set to 1 and print newline
 	if ($exit_status eq "INT"){
@@ -240,8 +240,7 @@ sub wprint {
 # Check to see if system has less
 # If so, set flag and open tmp file
 sub checkLess {
-	return $HASLESS if defined $HASLESS;
-	$HASLESS //= !system("which less > /dev/null 2>&1") or return 0;
+	$HASLESS |= !system("which less > /dev/null 2>&1") or return 0;
 	open $LESSOUT, "+>", $TMPOUT;
 	return 1;
 }
@@ -254,7 +253,7 @@ sub checkLess {
 # Check to see if system has cURL
 # If so, set flag
 sub checkcURL {
-	return $HASCURL //= !system("which curl > /dev/null 2>&1");
+  return $HASCURL |= !system("which curl > /dev/null 2>&1");
 }
 
 
@@ -448,7 +447,7 @@ sub parseCommandLine {
 				return;
 			}
 
-			$MAX_DEPTH = $depth;
+			$MAX_DEPTH = $depth + 1;
 			debugPrint("Valid parse depth: $MAX_DEPTH\n");
 		},
 		'--remote' => sub {
@@ -1666,4 +1665,3 @@ sub prompt {
 	return $answer;
 }
 
-# kate: space-indent off; indent-width 4; mixedindent off; indent-mode cstyle;
