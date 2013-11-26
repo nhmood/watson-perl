@@ -34,6 +34,7 @@
 ###########################################################
 
 use strict;
+no strict 'refs';
 use feature qw/say/;  # implies dependency on perl 5.10
 use autodie; # in Core since 5.10
 use warnings;
@@ -1038,7 +1039,7 @@ sub githubSetup {
 	# Parse config to make sure no previous API exists
 	parseConfig() if checkConfig();
 
-	if ($GITHUB_API ne "" or $GITHUB_REPO ne "") {
+	if (defined $GITHUB_API or defined $GITHUB_REPO) {
 		my $overwrite = uc prompt(
 			{ default => "N" },
 			box(BOLD RED "!"),
@@ -1347,10 +1348,6 @@ sub postGithub {
 		}
 	}
 
-	if (length($BITBUCKET_API) != 0){
-		# Bitbucket Implementation
-	}
-
 
 }
 
@@ -1385,7 +1382,7 @@ sub bitbucketSetup {
 	# Parse config to make sure no previous API exists
 	parseConfig() if checkConfig();
 
-	if ( ($BITBUCKET_API  ne "") || ($BITBUCKET_REPO ne "") ){
+	if ( defined $BITBUCKET_API || defined $BITBUCKET_REPO ){
 		my $overwrite = uc prompt(
 			{ default => 'N' },
 			box(BOLD RED "!"),
