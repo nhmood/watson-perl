@@ -909,7 +909,7 @@ sub getComment {
 
 	my %exts;
 	$exts{$_} = qr{//} for qw/cpp cc c h c++ m mm java class cs js php go scala/; # [todo] - add /* style comment
-	$exts{$_} = qr{#}  for qw/sh rb pl pm py coffee/;
+	$exts{$_} = qr{#}  for qw/sh rb pl pm py coffee zsh sh t/;
 	$exts{$_} = qr{--}  for qw/hs/;
 	$exts{$_} = qr{%}  for qw/erl/;
 	$exts{$_} = qr{;;}  for qw/clj/;
