@@ -1061,7 +1061,7 @@ sub githubSetup {
 
 	# Get username, clear newlines surrounding text
 	# If blank, give error
-	my $username = prompt(BOLD "Username: ", RESET);
+	my $username = lc prompt(BOLD "Username: ", RESET);
 	if ($username eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
@@ -1109,13 +1109,13 @@ sub githubSetup {
 	print "      e.g. owner: nhmood, repo: watson (case sensitive)\n";
 	print "      See help or README for more details on GitHub access\n\n";
 
-	my $owner = prompt(BOLD "Owner: ", RESET);
+	my $owner = lc prompt(BOLD "Owner: ", RESET);
 	if ($owner eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
-	my $repo = prompt(BOLD "Repo: ", RESET);
+	my $repo = lc prompt(BOLD "Repo: ", RESET);
 	if ($repo eq ""){
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
@@ -1410,7 +1410,7 @@ sub bitbucketSetup {
 
 	# Get username, clear newlines surrounding text
 	# If blank, give error
-	my $username = prompt(BOLD "Username: ", RESET);
+	my $username = lc prompt(BOLD "Username: ", RESET);
 	if ($username eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter your username!\n", RESET;
@@ -1428,13 +1428,13 @@ sub bitbucketSetup {
 	print "      See help or README for more details on GitHub access\n\n";
 
 
-	my $owner = prompt(BOLD "Owner: ", RESET);
+	my $owner = lc prompt(BOLD "Owner: ", RESET);
 	if ($owner eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the owner the repo is under!\n", RESET;
 		cExit(1);
 	}
-	my $repo = prompt(BOLD "Repo: ", RESET);
+	my $repo = lc prompt(BOLD "Repo: ", RESET);
 	if ($repo eq "") {
 		print box(BOLD RED "x");
 		print BOLD "Input blank. Please enter the repo name!\n", RESET;
